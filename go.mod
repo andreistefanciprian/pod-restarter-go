@@ -1,4 +1,4 @@
-module github.com/andreistefanciprian/pod-restarter-golang
+module github.com/andreistefanciprian/pod-restarter-go
 
 go 1.19
 
