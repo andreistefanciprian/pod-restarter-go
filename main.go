@@ -19,20 +19,18 @@ import (
 )
 
 type podRestarter struct {
-	errorLog           *log.Logger
-	infoLog            *log.Logger
-	errorMessage       string
-	pollingInterval    time.Duration
-	kubeconfig         *string
-	ctx                context.Context
-	clientset          *kubernetes.Clientset
-	namespace          string
-	pendingPods        map[string]string
-	pendingErroredPods map[string]string
+	errorLog   *log.Logger
+	infoLog    *log.Logger
+	kubeconfig *string
+	ctx        context.Context
+	clientset  *kubernetes.Clientset
+	namespace  string
 }
 
-func (p *podRestarter) getPendingPods() error {
+// get a map with Pending Pods (podName:podNamespace)
+func (p *podRestarter) getPendingPods() (error, map[string]string) {
 	api := p.clientset.CoreV1()
+	var pendingPods = make(map[string]string)
 
 	// list all Pods in Pending state
 	pods, err := api.Pods(p.namespace).List(
@@ -43,18 +41,16 @@ func (p *podRestarter) getPendingPods() error {
 		},
 	)
 	if err != nil {
-		// panic(err.Error())
 		msg := fmt.Sprintf("Could not get a list of Pending Pods: \n%v", err)
-		return errors.New(msg)
+		return errors.New(msg), pendingPods
 	}
 
-	p.pendingPods = make(map[string]string)
 	for _, pod := range pods.Items {
 		p.infoLog.Printf("Pod %s/%s is in Pending state", pod.ObjectMeta.Namespace, pod.ObjectMeta.Name)
-		p.pendingPods[pod.ObjectMeta.Name] = pod.ObjectMeta.Namespace
+		pendingPods[pod.ObjectMeta.Name] = pod.ObjectMeta.Namespace
 	}
-	p.infoLog.Printf("There are a total of %d Pods in Pending state in the cluster\n", len(p.pendingPods))
-	return nil
+	p.infoLog.Printf("There are a total of %d Pods in Pending state in the cluster\n", len(pendingPods))
+	return nil, pendingPods
 }
 
 // get Pod Events
@@ -90,36 +86,10 @@ func (p *podRestarter) getPodEvents(pod, namespace string) (error, []string) {
 	}
 }
 
-// get a map with Pods that have error message
-// Maybe we should do this in main func?
-func (p *podRestarter) getErroredPendingPods() {
-	p.pendingErroredPods = make(map[string]string)
-	// for each name/pod
-	for pod, namespace := range p.pendingPods {
-		// get Pod events
-		err, events := p.getPodEvents(pod, namespace)
-		if err != nil {
-			p.errorLog.Println(err)
-		}
-		// if error message is in events
-		// append Pod to map
-		for _, event := range events {
-			if strings.Contains(event, p.errorMessage) {
-				p.infoLog.Printf("Pod %s/%s has error: %s", namespace, pod, event)
-				p.pendingErroredPods[pod] = namespace
-				break // break after seeing message only once in the events
-			}
-		}
-	}
-	p.infoLog.Printf(
-		"There are a total of %d/%d Pods in Pending State with error message: %s",
-		len(p.pendingErroredPods), len(p.pendingPods), p.errorMessage,
-	)
-}
-
 // verify if a Pod exists and is in Pending state
 func (p *podRestarter) verifyPendingPodExists(pod, namespace string) (error, bool) {
 	api := p.clientset.CoreV1()
+
 	podStruct, err := api.Pods(namespace).Get(
 		p.ctx,
 		pod,
@@ -144,7 +114,6 @@ func (p *podRestarter) verifyPendingPodExists(pod, namespace string) (error, boo
 				"Pod %s/%s exists but is not in a Pending state anymore. Pod state: %s",
 				namespace, pod, podStruct.Status.Phase,
 			)
-			// fmt.Printf("%+v", podStruct)	// DEBUG
 			return errors.New(msg), false
 		}
 	}
@@ -173,12 +142,12 @@ func main() {
 	// define variables
 	infoLog := log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
 	errorLog := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
-	// errorMessage := "Failed to pull image"
-	errorMessage := "Back-off pulling image"
-	// errorMessage := "container veth name provided (eth0) already exists"
 	var pollingInterval int
 	var kubeconfig *string
 	ctx := context.TODO()
+	// errorMessage := "Failed to pull image"
+	errorMessage := "Back-off pulling image"
+	// errorMessage := "container veth name provided (eth0) already exists"
 
 	// define cli params
 	if home := homedir.HomeDir(); home != "" {
@@ -191,7 +160,6 @@ func main() {
 	flag.Parse()
 
 	for {
-
 		fmt.Println("\n############## POD-RESTARTER ##############")
 		infoLog.Printf("Running every %d seconds", pollingInterval)
 
@@ -213,27 +181,49 @@ func main() {
 		}
 
 		p := &podRestarter{
-			errorLog:        errorLog,
-			infoLog:         infoLog,
-			errorMessage:    errorMessage,
-			pollingInterval: 10,
-			kubeconfig:      kubeconfig,
-			ctx:             ctx,
-			namespace:       *namespace,
-			clientset:       clientset,
+			errorLog:   errorLog,
+			infoLog:    infoLog,
+			kubeconfig: kubeconfig,
+			ctx:        ctx,
+			namespace:  *namespace,
+			clientset:  clientset,
 		}
 
-		err = p.getPendingPods()
+		var pendingPods = make(map[string]string)
+		var pendingErroredPods = make(map[string]string)
+
+		err, pendingPods = p.getPendingPods()
 		if err != nil {
 			errorLog.Println(err)
 			continue
+		} else {
+			for pod, namespace := range pendingPods {
+
+				// get Pod events
+				err, events := p.getPodEvents(pod, namespace)
+				if err != nil {
+					p.errorLog.Println(err)
+				}
+				// if error message is in events
+				// append Pod to map
+				for _, event := range events {
+					if strings.Contains(event, errorMessage) {
+						infoLog.Printf("Pod %s/%s has error: %s", namespace, pod, event)
+						pendingErroredPods[pod] = namespace
+						break // break after seeing message only once in the events
+					}
+				}
+			}
+			p.infoLog.Printf(
+				"There are a total of %d/%d Pods in Pending State with error message: %s",
+				len(pendingErroredPods), len(pendingPods), errorMessage,
+			)
 		}
-		p.getErroredPendingPods()
-		// infoLog.Printf("There are %d pending Pods: %+v", len(p.pendingPods), p.pendingPods)	// DEBUG
-		// infoLog.Printf("There are %d errored Pods: %+v", len(p.pendingErroredPods), p.pendingErroredPods)	// DEBUG
+		// // infoLog.Printf("There are %d pending Pods: %+v", len(p.pendingPods), p.pendingPods)	// DEBUG
+		// // infoLog.Printf("There are %d errored Pods: %+v", len(p.pendingErroredPods), p.pendingErroredPods)	// DEBUG
 
 		// iterate through error Pods map
-		for pod, namespace := range p.pendingErroredPods {
+		for pod, namespace := range pendingErroredPods {
 			// verify if Pod exists and is still in a Pending state
 			err, _ = p.verifyPendingPodExists(pod, namespace)
 			if err != nil {
@@ -247,6 +237,5 @@ func main() {
 			}
 		}
 		time.Sleep(time.Duration(pollingInterval) * time.Second) // sleep for n seconds
-		// os.Exit(0)	// DEBUG
 	}
 }
