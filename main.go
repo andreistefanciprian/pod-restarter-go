@@ -176,7 +176,7 @@ func main() {
 	// errorMessage := "Failed to pull image"
 	errorMessage := "Back-off pulling image"
 	// errorMessage := "container veth name provided (eth0) already exists"
-	var pollingInterval time.Duration = 10
+	var pollingInterval int
 	var kubeconfig *string
 	ctx := context.TODO()
 
@@ -187,11 +187,12 @@ func main() {
 		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 	}
 	namespace := flag.String("namespace", "", "kubernetes namespace")
-	// pollingInterval := flag.DurationVar("polling-interval", 10, "polling interval")
+	flag.IntVar(&pollingInterval, "polling-interval", 10, "number of seconds between iterations")
 	flag.Parse()
 
 	for {
-		fmt.Println("\n\n\n") // DEBUG
+
+		fmt.Println("\n############## POD-RESTARTER ##############")
 		infoLog.Printf("Running every %d seconds", pollingInterval)
 
 		// read and parse kubeconfig
@@ -245,8 +246,7 @@ func main() {
 				}
 			}
 		}
-		time.Sleep(pollingInterval * time.Second) // sleep for n seconds
+		time.Sleep(time.Duration(pollingInterval) * time.Second) // sleep for n seconds
 		// os.Exit(0)	// DEBUG
-		// break	// DEBUG
 	}
 }
