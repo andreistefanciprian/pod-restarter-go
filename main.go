@@ -80,7 +80,10 @@ func (p *podRestarter) getPodEvents(pod, namespace string) (error, []string) {
 	}
 
 	if len(events) == 0 {
-		msg := fmt.Sprintf("Pod %s/%s has 0 Events. Probably the Pod does not exist or does not have any events in the last hour", namespace, pod)
+		msg := fmt.Sprintf(
+			"Pod %s/%s has 0 Events. Probably it does not exist or it does not have any events in the last hour",
+			namespace, pod,
+		)
 		return errors.New(msg), events
 	} else {
 		return nil, events
@@ -88,7 +91,7 @@ func (p *podRestarter) getPodEvents(pod, namespace string) (error, []string) {
 }
 
 // get a map with Pods that have error message
-// Maybe we shoudl do this in main func?
+// Maybe we should do this in main func?
 func (p *podRestarter) getErroredPendingPods() {
 	p.pendingErroredPods = make(map[string]string)
 	// for each name/pod
@@ -108,7 +111,10 @@ func (p *podRestarter) getErroredPendingPods() {
 			}
 		}
 	}
-	p.infoLog.Printf("There are a total of %d/%d Pods in Pending State with error message: %s", len(p.pendingErroredPods), len(p.pendingPods), p.errorMessage)
+	p.infoLog.Printf(
+		"There are a total of %d/%d Pods in Pending State with error message: %s",
+		len(p.pendingErroredPods), len(p.pendingPods), p.errorMessage,
+	)
 }
 
 // verify if a Pod exists and is in Pending state
@@ -134,7 +140,10 @@ func (p *podRestarter) verifyPendingPodExists(pod, namespace string) (error, boo
 			p.infoLog.Printf("Pod %s/%s exists and is in a %s state", namespace, pod, podStruct.Status.Phase)
 			return nil, true
 		} else {
-			msg := fmt.Sprintf("Pod %s/%s exists but is not in a Pending state anymore. Pod state: %s", namespace, pod, podStruct.Status.Phase)
+			msg := fmt.Sprintf(
+				"Pod %s/%s exists but is not in a Pending state anymore. Pod state: %s",
+				namespace, pod, podStruct.Status.Phase,
+			)
 			// fmt.Printf("%+v", podStruct)	// DEBUG
 			return errors.New(msg), false
 		}
