@@ -18,6 +18,7 @@ import (
 	"k8s.io/client-go/util/homedir"
 )
 
+// podRestarter holds app parameters
 type podRestarter struct {
 	errorLog   *log.Logger
 	infoLog    *log.Logger
@@ -28,7 +29,7 @@ type podRestarter struct {
 }
 
 // get a map with Pending Pods (podName:podNamespace)
-func (p *podRestarter) getPendingPods() (error, map[string]string) {
+func (p *podRestarter) getPendingPods() (map[string]string, error) {
 	api := p.clientset.CoreV1()
 	var pendingPods = make(map[string]string)
 
@@ -42,7 +43,7 @@ func (p *podRestarter) getPendingPods() (error, map[string]string) {
 	)
 	if err != nil {
 		msg := fmt.Sprintf("Could not get a list of Pending Pods: \n%v", err)
-		return errors.New(msg), pendingPods
+		return pendingPods, errors.New(msg)
 	}
 
 	for _, pod := range pods.Items {
@@ -50,11 +51,11 @@ func (p *podRestarter) getPendingPods() (error, map[string]string) {
 		pendingPods[pod.ObjectMeta.Name] = pod.ObjectMeta.Namespace
 	}
 	p.infoLog.Printf("There are a total of %d Pods in Pending state in the cluster\n", len(pendingPods))
-	return nil, pendingPods
+	return pendingPods, nil
 }
 
 // get Pod Events
-func (p *podRestarter) getPodEvents(pod, namespace string) (error, []string) {
+func (p *podRestarter) getPodEvents(pod, namespace string) ([]string, error) {
 	var events []string
 	api := p.clientset.CoreV1()
 
@@ -68,7 +69,7 @@ func (p *podRestarter) getPodEvents(pod, namespace string) (error, []string) {
 
 	if err != nil {
 		msg := fmt.Sprintf("Could not go through Pod %s/%s Events: \n%v", namespace, pod, err)
-		return errors.New(msg), events
+		return events, errors.New(msg)
 	}
 
 	for _, item := range eventsStruct.Items {
@@ -80,14 +81,14 @@ func (p *podRestarter) getPodEvents(pod, namespace string) (error, []string) {
 			"Pod %s/%s has 0 Events. Probably it does not exist or it does not have any events in the last hour",
 			namespace, pod,
 		)
-		return errors.New(msg), events
+		return events, errors.New(msg)
 	} else {
-		return nil, events
+		return events, nil
 	}
 }
 
 // verify if a Pod exists and is in Pending state
-func (p *podRestarter) verifyPendingPodExists(pod, namespace string) (error, bool) {
+func (p *podRestarter) verifyPendingPodExists(pod, namespace string) (bool, error) {
 	api := p.clientset.CoreV1()
 
 	podStruct, err := api.Pods(namespace).Get(
@@ -97,24 +98,24 @@ func (p *podRestarter) verifyPendingPodExists(pod, namespace string) (error, boo
 	)
 	if e.IsNotFound(err) {
 		msg := fmt.Sprintf("Pod %s/%s does not exist anymore", namespace, pod)
-		return errors.New(msg), false
+		return false, errors.New(msg)
 	} else if statusError, isStatus := err.(*e.StatusError); isStatus {
 		msg := fmt.Sprintf("Error getting pod %s/%s: %v",
 			namespace, pod, statusError.ErrStatus.Message)
-		return errors.New(msg), false
+		return false, errors.New(msg)
 	} else if err != nil {
 		msg := fmt.Sprintf("Pod %s/%s has a problem: %v", namespace, pod, err)
-		return errors.New(msg), false
+		return false, errors.New(msg)
 	} else {
 		if podStruct.Status.Phase == "Pending" {
 			p.infoLog.Printf("Pod %s/%s exists and is in a %s state", namespace, pod, podStruct.Status.Phase)
-			return nil, true
+			return true, nil
 		} else {
 			msg := fmt.Sprintf(
 				"Pod %s/%s exists but is not in a Pending state anymore. Pod state: %s",
 				namespace, pod, podStruct.Status.Phase,
 			)
-			return errors.New(msg), false
+			return false, errors.New(msg)
 		}
 	}
 }
@@ -137,19 +138,17 @@ func (p *podRestarter) deletePod(pod, namespace string) error {
 	}
 }
 
+// define variables
+var infoLog = log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
+var errorLog = log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
+var pollingInterval int
+var kubeconfig *string
+var ctx = context.TODO()
+var errorMessage string
+
 func main() {
 
-	// define variables
-	infoLog := log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
-	errorLog := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
-	var pollingInterval int
-	var kubeconfig *string
-	ctx := context.TODO()
-	// errorMessage := "Failed to pull image"
-	errorMessage := "Back-off pulling image"
-	// errorMessage := "container veth name provided (eth0) already exists"
-
-	// define cli params
+	// define and parse cli params
 	if home := homedir.HomeDir(); home != "" {
 		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
 	} else {
@@ -157,6 +156,12 @@ func main() {
 	}
 	namespace := flag.String("namespace", "", "kubernetes namespace")
 	flag.IntVar(&pollingInterval, "polling-interval", 10, "number of seconds between iterations")
+	flag.StringVar(
+		&errorMessage,
+		"error-message",
+		"container veth name provided (eth0) already exists",
+		"number of seconds between iterations",
+	)
 	flag.Parse()
 
 	for {
@@ -192,47 +197,47 @@ func main() {
 		var pendingPods = make(map[string]string)
 		var pendingErroredPods = make(map[string]string)
 
-		err, pendingPods = p.getPendingPods()
+		pendingPods, err = p.getPendingPods()
 		if err != nil {
 			errorLog.Println(err)
 			continue
 		} else {
-			for pod, namespace := range pendingPods {
+			for pod, ns := range pendingPods {
 
 				// get Pod events
-				err, events := p.getPodEvents(pod, namespace)
+				events, err := p.getPodEvents(pod, ns)
 				if err != nil {
-					p.errorLog.Println(err)
+					errorLog.Println(err)
 				}
 				// if error message is in events
 				// append Pod to map
 				for _, event := range events {
 					if strings.Contains(event, errorMessage) {
-						infoLog.Printf("Pod %s/%s has error: %s", namespace, pod, event)
-						pendingErroredPods[pod] = namespace
+						infoLog.Printf("Pod %s/%s has error: %s", ns, pod, event)
+						pendingErroredPods[pod] = ns
 						break // break after seeing message only once in the events
 					}
 				}
 			}
-			p.infoLog.Printf(
+			infoLog.Printf(
 				"There are a total of %d/%d Pods in Pending State with error message: %s",
 				len(pendingErroredPods), len(pendingPods), errorMessage,
 			)
 		}
-		// // infoLog.Printf("There are %d pending Pods: %+v", len(p.pendingPods), p.pendingPods)	// DEBUG
-		// // infoLog.Printf("There are %d errored Pods: %+v", len(p.pendingErroredPods), p.pendingErroredPods)	// DEBUG
+		// // infoLog.Printf("There are %d pending Pods: %+v", len(pendingPods), pendingPods)	// DEBUG
+		// // infoLog.Printf("There are %d errored Pods: %+v", len(pendingErroredPods), pendingErroredPods)	// DEBUG
 
 		// iterate through error Pods map
-		for pod, namespace := range pendingErroredPods {
+		for pod, ns := range pendingErroredPods {
 			// verify if Pod exists and is still in a Pending state
-			err, _ = p.verifyPendingPodExists(pod, namespace)
+			_, err = p.verifyPendingPodExists(pod, ns)
 			if err != nil {
-				p.errorLog.Println(err)
+				errorLog.Println(err)
 			} else {
 				// delete Pod
-				err := p.deletePod(pod, namespace)
+				err := p.deletePod(pod, ns)
 				if err != nil {
-					p.errorLog.Println(err)
+					errorLog.Println(err)
 				}
 			}
 		}
