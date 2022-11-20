@@ -57,31 +57,57 @@ func (p *podRestarter) getPendingPods() error {
 	return nil
 }
 
-func (p *podRestarter) getErroredPendingPods() {
+// get Pod Events
+func (p *podRestarter) getPodEvents(pod, namespace string) (error, []string) {
+	var events []string
 	api := p.clientset.CoreV1()
+
+	// get Pod events
+	eventsStruct, err := api.Events(namespace).List(
+		p.ctx,
+		v1.ListOptions{
+			FieldSelector: fmt.Sprintf("involvedObject.name=%s", pod),
+			TypeMeta:      v1.TypeMeta{Kind: "Pod"},
+		})
+
+	if err != nil {
+		msg := fmt.Sprintf("Could not go through Pod %s/%s Events: \n%v", namespace, pod, err)
+		return errors.New(msg), events
+	}
+
+	for _, item := range eventsStruct.Items {
+		events = append(events, item.Message)
+	}
+
+	if len(events) == 0 {
+		msg := fmt.Sprintf("Pod %s/%s has 0 Events. Probably the Pod does not exist or does not have any events in the last hour", namespace, pod)
+		return errors.New(msg), events
+	} else {
+		return nil, events
+	}
+}
+
+// get a map with Pods that have error message
+// Maybe we shoudl do this in main func?
+func (p *podRestarter) getErroredPendingPods() {
 	p.pendingErroredPods = make(map[string]string)
 	// for each name/pod
 	for pod, namespace := range p.pendingPods {
-
 		// get Pod events
-		events, _ := api.Events(namespace).List(
-			p.ctx,
-			v1.ListOptions{
-				FieldSelector: fmt.Sprintf("involvedObject.name=%s", pod),
-				TypeMeta:      v1.TypeMeta{Kind: "Pod"},
-			})
-
+		err, events := p.getPodEvents(pod, namespace)
+		if err != nil {
+			p.errorLog.Println(err)
+		}
 		// if error message is in events
 		// append Pod to map
-		for _, item := range events.Items {
-			if strings.Contains(item.Message, p.errorMessage) {
-				p.infoLog.Printf("Pod %s/%s has error: %s", namespace, pod, item.Message)
+		for _, event := range events {
+			if strings.Contains(event, p.errorMessage) {
+				p.infoLog.Printf("Pod %s/%s has error: %s", namespace, pod, event)
 				p.pendingErroredPods[pod] = namespace
 				break // break after seeing message only once in the events
 			}
 		}
 	}
-
 	p.infoLog.Printf("There are a total of %d/%d Pods in Pending State with error message: %s", len(p.pendingErroredPods), len(p.pendingPods), p.errorMessage)
 }
 
@@ -112,9 +138,7 @@ func (p *podRestarter) verifyPendingPodExists(pod, namespace string) (error, boo
 			// fmt.Printf("%+v", podStruct)	// DEBUG
 			return errors.New(msg), false
 		}
-
 	}
-
 }
 
 // deletes a Pod
@@ -143,7 +167,7 @@ func main() {
 	// errorMessage := "Failed to pull image"
 	errorMessage := "Back-off pulling image"
 	// errorMessage := "container veth name provided (eth0) already exists"
-	var pollingInterval time.Duration = 5
+	var pollingInterval time.Duration = 10
 	var kubeconfig *string
 	ctx := context.TODO()
 
@@ -158,7 +182,7 @@ func main() {
 	flag.Parse()
 
 	for {
-		time.Sleep(pollingInterval * time.Second) // sleep for n seconds
+		fmt.Println("\n\n\n") // DEBUG
 		infoLog.Printf("Running every %d seconds", pollingInterval)
 
 		// read and parse kubeconfig
@@ -212,10 +236,8 @@ func main() {
 				}
 			}
 		}
-
-		fmt.Println("\n\n\n") // DEBUG
+		time.Sleep(pollingInterval * time.Second) // sleep for n seconds
 		// os.Exit(0)	// DEBUG
 		// break	// DEBUG
 	}
-
 }
