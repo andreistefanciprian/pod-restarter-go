@@ -1,0 +1,14 @@
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ include "pod_restarter.fullname" . }}
+  labels:
+    {{- include "pod_restarter.labels" . | nindent 4 }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "pod_restarter.fullname" . }}
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: {{ include "pod_restarter.fullname" . }}
+  apiGroup: ""

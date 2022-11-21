@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pod_restarter.fullname" . }}
+  labels:
+    {{- include "pod_restarter.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "pod_restarter.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pod_restarter.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "pod_restarter.fullname" . }}
+      containers:
+      - name: {{ include "pod_restarter.fullname" . }}
+        image: {{ .Values.image.repository }}@{{ .Values.image.digest }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        args:
+          - --namespace=$(NAMESPACE)
+          - --polling-interval=$(POLLING_INTERVAL)
+          - --error-message=$(ERROR_MESSAGE)
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        env:
+          - name: ERROR_MESSAGE
+            value: {{ .Values.podRestarter.errorMessage }}
+          - name: POLLING_INTERVAL
+            value: "{{ .Values.podRestarter.pollInterval }}"
+          - name: NAMESPACE
+            value: "{{ .Values.podRestarter.namespace }}"
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
