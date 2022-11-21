@@ -1,3 +1,13 @@
+// This script runs in/out a K8s cluster
+// Deletes Pods that are in a Pending state due to a particular error
+
+// The script goes through this sequence of steps:
+// - get an array of all Pending Pods that have the error event
+// - for each Pending Pod that has the error event
+//   - delete the Pod if it still exists and in a Pending state
+//
+// Script executes the above steps every n seconds
+
 package main
 
 import (
