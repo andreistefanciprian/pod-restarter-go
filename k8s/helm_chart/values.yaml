@@ -1,0 +1,55 @@
+# Default values for pod_restarter.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+podRestarter:
+  # errorMessage: 'Failed to pull image "wrongimage"'
+  errorMessage: Back-off pulling image
+  # errorMessage: container veth name provided (eth0) already exists
+  pollInterval: 10
+  namespace: ""
+  # namespace: "default"
+
+image:
+  repository: andreistefanciprian/pod-restarter-go
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "latest"
+  digest: "sha256:b8806cbdcad589ec59afbcc5ee00ddb4ac5d797186236586cfe741433982868c"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: "pod-restarter"
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
