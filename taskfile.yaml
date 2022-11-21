@@ -1,0 +1,31 @@
+version: '3'
+
+env:
+  DOCKER_IMAGE: andreistefanciprian/pod-restarter-go
+  APP_NAME: pod-restarter
+
+tasks:
+
+  generate-pending-pods:
+    cmds:
+      - bash k8s/generate_pending_pods.sh
+
+  uninstall:
+    cmds:
+      # - helm uninstall {{.APP_NAME}}
+      - kubectl delete -f deployment.yaml
+
+  build:
+    cmds:
+      - docker build -t {{.DOCKER_IMAGE}} .
+      - docker image push {{.DOCKER_IMAGE}}
+
+  install:
+    cmds:
+      # - task: build
+      # - helm upgrade --install --set image.digest={{.DOCKER_TAG}} {{.APP_NAME}} k8s/helm_chart
+      - kubectl create -f deployment.yaml
+      
+    vars:
+      DOCKER_TAG:
+        sh: docker image ls {{.DOCKER_IMAGE}} --digests | grep sha256 | awk '{print $3}' | head -n 1

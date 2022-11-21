@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pod-restarter-go
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pod-restarter-go
+rules:
+- apiGroups: [""]
+  resources: ["pods", "pods/log", "pods/status"]
+  verbs: ['*']
+- apiGroups: [""]
+  resources: ["namespaces", "events"]
+  verbs: ["get", "watch", "list"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: pod-restarter-go
+subjects:
+- kind: ServiceAccount
+  name: pod-restarter-go
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: pod-restarter-go
+  apiGroup: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pod-restarter-go
+  labels:
+    app: pod-restarter-go
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pod-restarter-go
+  template:
+    metadata:
+      labels:
+        app: pod-restarter-go
+    spec:
+      serviceAccountName: pod-restarter-go
+      containers:
+      - name: pod-restarter-go
+        image: andreistefanciprian/pod-restarter-go:latest
+        resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+        env:
+          - name: ERROR_MESSAGE
+            value: "Failed to pull image"
+          - name: POLLING_INTERVAL
+            value: "30"
+          - name: KUBE_AUTH_INSIDE_CLUSTER
+            value: "True"
+          - name: NAMESPACE
+            value: "default"
+        args:
+          - --namespace=$(NAMESPACE)
+          - --polling-interval=$(POLLING_INTERVAL)
+          - --error-message=$(ERROR_MESSAGE)
