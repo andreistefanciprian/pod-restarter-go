@@ -10,7 +10,7 @@ RUN go mod download
 RUN go build -a -o pod-restarter
 
 ## Deploy
-FROM gcr.io/distroless/base-debian10
+FROM gcr.io/distroless/base-debian11
 
 COPY --from=build /app/pod-restarter .
 
