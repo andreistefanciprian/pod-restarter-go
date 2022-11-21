@@ -12,8 +12,7 @@ tasks:
 
   uninstall:
     cmds:
-      # - helm uninstall {{.APP_NAME}}
-      - kubectl delete -f deployment.yaml
+      - helm uninstall {{.APP_NAME}}
 
   build:
     cmds:
@@ -22,9 +21,8 @@ tasks:
 
   install:
     cmds:
-      # - task: build
-      # - helm upgrade --install --set image.digest={{.DOCKER_TAG}} {{.APP_NAME}} k8s/helm_chart
-      - kubectl create -f deployment.yaml
+      - helm template --set image.digest={{.DOCKER_TAG}} {{.APP_NAME}} k8s/helm_chart
+      - helm upgrade --install --set image.digest={{.DOCKER_TAG}} {{.APP_NAME}} k8s/helm_chart
       
     vars:
       DOCKER_TAG:
