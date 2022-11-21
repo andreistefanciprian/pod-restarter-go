@@ -176,8 +176,6 @@ func main() {
 
 	flag.Parse()
 
-	infoLog.Printf("kubeconfig: %s", kubeconfig)
-
 	// read and parse kubeconfig
 	config, err := rest.InClusterConfig() // creates the in-cluster config
 	if err != nil {
