@@ -29,23 +29,45 @@ import (
 	"k8s.io/client-go/util/homedir"
 )
 
-// podRestarter holds app parameters
+// podRestarter holds k8s parameters
 type podRestarter struct {
 	errorLog   *log.Logger
 	infoLog    *log.Logger
 	kubeconfig *string
 	ctx        context.Context
 	clientset  *kubernetes.Clientset
-	namespace  string
+}
+
+func (p *podRestarter) k8sClient() (*kubernetes.Clientset, error) {
+	// read and parse kubeconfig
+	config, err := rest.InClusterConfig() // creates the in-cluster config
+	if err != nil {
+		config, err = clientcmd.BuildConfigFromFlags("", *p.kubeconfig) // creates the out-cluster config
+		if err != nil {
+			msg := fmt.Sprintf("The kubeconfig cannot be loaded: %v\n", err)
+			return nil, errors.New(msg)
+		}
+		p.infoLog.Println("Running from OUTSIDE the cluster")
+	} else {
+		p.infoLog.Println("Running from INSIDE the cluster")
+	}
+
+	// create the clientset
+	p.clientset, err = kubernetes.NewForConfig(config)
+	if err != nil {
+		msg := fmt.Sprintf("The clientset cannot be created: %v\n", err)
+		return nil, errors.New(msg)
+	}
+	return p.clientset, nil
 }
 
 // get a map with Pending Pods (podName:podNamespace)
-func (p *podRestarter) getPendingPods() (map[string]string, error) {
+func (p *podRestarter) getPendingPods(namespace string) (map[string]string, error) {
 	api := p.clientset.CoreV1()
 	var pendingPods = make(map[string]string)
 
 	// list all Pods in Pending state
-	pods, err := api.Pods(p.namespace).List(
+	pods, err := api.Pods(namespace).List(
 		p.ctx,
 		v1.ListOptions{
 			TypeMeta:      v1.TypeMeta{Kind: "Pod"},
@@ -61,7 +83,7 @@ func (p *podRestarter) getPendingPods() (map[string]string, error) {
 		p.infoLog.Printf("Pod %s/%s is in Pending state", pod.ObjectMeta.Namespace, pod.ObjectMeta.Name)
 		pendingPods[pod.ObjectMeta.Name] = pod.ObjectMeta.Namespace
 	}
-	p.infoLog.Printf("There are a total of %d Pods in Pending state in the cluster\n", len(pendingPods))
+	p.infoLog.Printf("There is a TOTAL of %d Pods in Pending state in the cluster\n", len(pendingPods))
 	return pendingPods, nil
 }
 
@@ -144,23 +166,26 @@ func (p *podRestarter) deletePod(pod, namespace string) error {
 		msg := fmt.Sprintf("For some reason Pod %s/%s could not be deleted: %v", namespace, pod, err)
 		return errors.New(msg)
 	} else {
-		p.infoLog.Printf("Deleted Pod %s/%s", namespace, pod)
+		p.infoLog.Printf("DELETED Pod %s/%s", namespace, pod)
 		return nil
 	}
 }
 
 // define variables
-var infoLog = log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
-var errorLog = log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
-var pollingInterval int
-var kubeconfig *string
-var ctx = context.TODO()
-var errorMessage string
+var (
+	infoLog         = log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
+	errorLog        = log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
+	pollingInterval int
+	kubeconfig      *string
+	ctx             = context.TODO()
+	errorMessage    string
+	namespace       string
+)
 
 func main() {
 
 	// define and parse cli params
-	namespace := flag.String("namespace", "", "kubernetes namespace")
+	flag.StringVar(&namespace, "namespace", "", "kubernetes namespace")
 	flag.IntVar(&pollingInterval, "polling-interval", 10, "number of seconds between iterations")
 	flag.StringVar(
 		&errorMessage,
@@ -173,49 +198,33 @@ func main() {
 	} else {
 		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 	}
-
 	flag.Parse()
-
-	// read and parse kubeconfig
-	config, err := rest.InClusterConfig() // creates the in-cluster config
-	if err != nil {
-		config, err = clientcmd.BuildConfigFromFlags("", *kubeconfig) // creates the out-cluster config
-		if err != nil {
-			// panic(err.Error())
-			errorLog.Printf("The kubeconfig cannot be loaded: %v\n", err)
-			os.Exit(1)
-		}
-		infoLog.Println("Running from OUTSIDE the cluster")
-	} else {
-		infoLog.Println("Running from INSIDE the cluster")
-	}
 
 	for {
 
 		fmt.Println("\n############## POD-RESTARTER ##############")
 		infoLog.Printf("Running every %d seconds", pollingInterval)
 
-		// create the clientset
-		clientset, err := kubernetes.NewForConfig(config)
-		if err != nil {
-			// panic(err.Error())
-			errorLog.Printf("The clientset cannot be created: %v\n", err)
-			os.Exit(1)
-		}
-
 		p := &podRestarter{
 			errorLog:   errorLog,
 			infoLog:    infoLog,
 			kubeconfig: kubeconfig,
 			ctx:        ctx,
-			namespace:  *namespace,
-			clientset:  clientset,
+		}
+
+		// authenticate to k8s cluster and initialise k8s client
+		clientset, err := p.k8sClient()
+		if err != nil {
+			errorLog.Println(err)
+			os.Exit(1)
+		} else {
+			p.clientset = clientset
 		}
 
 		var pendingPods = make(map[string]string)
 		var pendingErroredPods = make(map[string]string)
 
-		pendingPods, err = p.getPendingPods()
+		pendingPods, err = p.getPendingPods(namespace)
 		if err != nil {
 			errorLog.Println(err)
 			// continue
@@ -238,7 +247,7 @@ func main() {
 				}
 			}
 			infoLog.Printf(
-				"There are a total of %d/%d Pods in Pending State with error message: %s",
+				"There is a TOTAL of %d/%d Pods in Pending State with error message: %s",
 				len(pendingErroredPods), len(pendingPods), errorMessage,
 			)
 		}
