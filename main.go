@@ -14,6 +14,7 @@ import (
 	e "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 )
@@ -149,11 +150,6 @@ var errorMessage string
 func main() {
 
 	// define and parse cli params
-	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-	}
 	namespace := flag.String("namespace", "", "kubernetes namespace")
 	flag.IntVar(&pollingInterval, "polling-interval", 10, "number of seconds between iterations")
 	flag.StringVar(
@@ -162,20 +158,34 @@ func main() {
 		"container veth name provided (eth0) already exists",
 		"number of seconds between iterations",
 	)
+	if home := homedir.HomeDir(); home != "" {
+		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+	} else {
+		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+	}
+
 	flag.Parse()
 
-	for {
-		fmt.Println("\n############## POD-RESTARTER ##############")
-		infoLog.Printf("Running every %d seconds", pollingInterval)
+	infoLog.Printf("kubeconfig: %s", kubeconfig)
 
-		// read and parse kubeconfig
-		config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig) // creates the out-cluster config
-		// config, err := rest.InClusterConfig()                          // creates the in-cluster config
+	// read and parse kubeconfig
+	config, err := rest.InClusterConfig() // creates the in-cluster config
+	if err != nil {
+		config, err = clientcmd.BuildConfigFromFlags("", *kubeconfig) // creates the out-cluster config
 		if err != nil {
 			// panic(err.Error())
 			errorLog.Printf("The kubeconfig cannot be loaded: %v\n", err)
 			os.Exit(1)
 		}
+		infoLog.Println("Running from OUTSIDE the cluster")
+	} else {
+		infoLog.Println("Running from INSIDE the cluster")
+	}
+
+	for {
+
+		fmt.Println("\n############## POD-RESTARTER ##############")
+		infoLog.Printf("Running every %d seconds", pollingInterval)
 
 		// create the clientset
 		clientset, err := kubernetes.NewForConfig(config)
@@ -200,7 +210,7 @@ func main() {
 		pendingPods, err = p.getPendingPods()
 		if err != nil {
 			errorLog.Println(err)
-			continue
+			// continue
 		} else {
 			for pod, ns := range pendingPods {
 
