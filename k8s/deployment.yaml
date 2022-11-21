@@ -1,0 +1,80 @@
+---
+# Source: pod-restarter/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pod-restarter
+  labels:
+    app: pod-restarter
+---
+# Source: pod-restarter/templates/cluster_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pod-restarter
+  labels:
+    app: pod-restarter
+rules:
+- apiGroups: [""]
+  resources: ["pods", "pods/log", "pods/status"]
+  verbs: ['*']
+- apiGroups: [""]
+  resources: ["namespaces", "events"]
+  verbs: ["get", "watch", "list"]
+---
+# Source: pod-restarter/templates/clusterrole_binding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: pod-restarter
+  labels:
+    app: pod-restarter
+subjects:
+- kind: ServiceAccount
+  name: pod-restarter
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: pod-restarter
+  apiGroup: ""
+---
+# Source: pod-restarter/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pod-restarter
+  labels:
+    app: pod-restarter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pod-restarter
+  template:
+    metadata:
+      labels:
+        app: pod-restarter
+    spec:
+      serviceAccountName: pod-restarter
+      containers:
+      - name: pod-restarter
+        image: andreistefanciprian/pod-restarter-go@sha256:b8806cbdcad589ec59afbcc5ee00ddb4ac5d797186236586cfe741433982868c
+        imagePullPolicy: IfNotPresent
+        args:
+          - --namespace=$(NAMESPACE)
+          - --polling-interval=$(POLLING_INTERVAL)
+          - --error-message=$(ERROR_MESSAGE)
+        resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+        env:
+          - name: ERROR_MESSAGE
+            value: Back-off pulling image
+          - name: POLLING_INTERVAL
+            value: "10"
+          - name: NAMESPACE
+            value: ""
