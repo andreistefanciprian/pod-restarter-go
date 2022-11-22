@@ -21,8 +21,9 @@ import (
 	"strings"
 	"time"
 
+	v1 "k8s.io/api/core/v1"
 	e "k8s.io/apimachinery/pkg/api/errors"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -69,8 +70,8 @@ func (p *podRestarter) getPendingPods(namespace string) (map[string]string, erro
 	// list all Pods in Pending state
 	pods, err := api.Pods(namespace).List(
 		p.ctx,
-		v1.ListOptions{
-			TypeMeta:      v1.TypeMeta{Kind: "Pod"},
+		metav1.ListOptions{
+			TypeMeta:      metav1.TypeMeta{Kind: "Pod"},
 			FieldSelector: "status.phase=Pending",
 		},
 	)
@@ -95,9 +96,9 @@ func (p *podRestarter) getPodEvents(pod, namespace string) ([]string, error) {
 	// get Pod events
 	eventsStruct, err := api.Events(namespace).List(
 		p.ctx,
-		v1.ListOptions{
+		metav1.ListOptions{
 			FieldSelector: fmt.Sprintf("involvedObject.name=%s", pod),
-			TypeMeta:      v1.TypeMeta{Kind: "Pod"},
+			TypeMeta:      metav1.TypeMeta{Kind: "Pod"},
 		})
 
 	if err != nil {
@@ -115,41 +116,39 @@ func (p *podRestarter) getPodEvents(pod, namespace string) ([]string, error) {
 			namespace, pod,
 		)
 		return events, errors.New(msg)
-	} else {
-		return events, nil
 	}
+	return events, nil
 }
 
 // verify if a Pod exists and is in Pending state
-func (p *podRestarter) verifyPendingPodExists(pod, namespace string) (bool, error) {
+func (p *podRestarter) verifyPendingPodExists(pod, namespace string) (*v1.Pod, error) {
 	api := p.clientset.CoreV1()
 
 	podStruct, err := api.Pods(namespace).Get(
 		p.ctx,
 		pod,
-		v1.GetOptions{},
+		metav1.GetOptions{},
 	)
 	if e.IsNotFound(err) {
 		msg := fmt.Sprintf("Pod %s/%s does not exist anymore", namespace, pod)
-		return false, errors.New(msg)
+		return nil, errors.New(msg)
 	} else if statusError, isStatus := err.(*e.StatusError); isStatus {
 		msg := fmt.Sprintf("Error getting pod %s/%s: %v",
 			namespace, pod, statusError.ErrStatus.Message)
-		return false, errors.New(msg)
+		return podStruct, errors.New(msg)
 	} else if err != nil {
 		msg := fmt.Sprintf("Pod %s/%s has a problem: %v", namespace, pod, err)
-		return false, errors.New(msg)
+		return podStruct, errors.New(msg)
 	} else {
 		if podStruct.Status.Phase == "Pending" {
 			p.infoLog.Printf("Pod %s/%s exists and is in a %s state", namespace, pod, podStruct.Status.Phase)
-			return true, nil
-		} else {
-			msg := fmt.Sprintf(
-				"Pod %s/%s exists but is not in a Pending state anymore. Pod state: %s",
-				namespace, pod, podStruct.Status.Phase,
-			)
-			return false, errors.New(msg)
+			return podStruct, nil
 		}
+		msg := fmt.Sprintf(
+			"Pod %s/%s exists but is not in a Pending state anymore. Pod state: %s",
+			namespace, pod, podStruct.Status.Phase,
+		)
+		return podStruct, errors.New(msg)
 	}
 }
 
@@ -160,15 +159,14 @@ func (p *podRestarter) deletePod(pod, namespace string) error {
 	err := api.Pods(namespace).Delete(
 		p.ctx,
 		pod,
-		v1.DeleteOptions{},
+		metav1.DeleteOptions{},
 	)
 	if err != nil {
 		msg := fmt.Sprintf("For some reason Pod %s/%s could not be deleted: %v", namespace, pod, err)
 		return errors.New(msg)
-	} else {
-		p.infoLog.Printf("DELETED Pod %s/%s", namespace, pod)
-		return nil
 	}
+	p.infoLog.Printf("DELETED Pod %s/%s", namespace, pod)
+	return nil
 }
 
 // define variables
