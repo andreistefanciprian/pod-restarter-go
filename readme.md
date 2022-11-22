@@ -15,8 +15,6 @@ Build a pod restarter with k8s client-go sdk.
 # install dependencies
 go mod init
 go mod tidy
-# or
-go mod download
 
 # delete Pending Pods that have default error message in all namespaces, every 10 seconds
 go run main.go
