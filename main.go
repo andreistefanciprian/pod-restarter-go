@@ -162,8 +162,7 @@ func (p *podRestarter) deletePod(pod, namespace string) error {
 		metav1.DeleteOptions{},
 	)
 	if err != nil {
-		msg := fmt.Sprintf("For some reason Pod %s/%s could not be deleted: %v", namespace, pod, err)
-		return errors.New(msg)
+		return err
 	}
 	p.infoLog.Printf("DELETED Pod %s/%s", namespace, pod)
 	return nil
@@ -238,7 +237,7 @@ func main() {
 				// append Pod to map
 				for _, event := range events {
 					if strings.Contains(event, errorMessage) {
-						infoLog.Printf("Pod %s/%s has error: %s", ns, pod, event)
+						infoLog.Printf("Pod %s/%s has error: \n%s", ns, pod, event)
 						pendingErroredPods[pod] = ns
 						break // break after seeing message only once in the events
 					}
@@ -252,10 +251,14 @@ func main() {
 		// // infoLog.Printf("There are %d pending Pods: %+v", len(pendingPods), pendingPods)	// DEBUG
 		// // infoLog.Printf("There are %d errored Pods: %+v", len(pendingErroredPods), pendingErroredPods)	// DEBUG
 
+		// time.Sleep(20 * time.Second) //DEBUG allow pods to heal
+
 		// iterate through error Pods map
 		for pod, ns := range pendingErroredPods {
 			// verify if Pod exists and is still in a Pending state
+			// var podData *v1.Pod	//DEBUG
 			_, err = p.verifyPendingPodExists(pod, ns)
+			// fmt.Printf("\n%+v\n", &podData.ObjectMeta)	//DEBUG
 			if err != nil {
 				errorLog.Println(err)
 			} else {
