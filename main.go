@@ -39,6 +39,7 @@ type podRestarter struct {
 	clientset  *kubernetes.Clientset
 }
 
+// dscover if kubeconfig creds are inside a Pod or outside the cluster
 func (p *podRestarter) k8sClient() (*kubernetes.Clientset, error) {
 	// read and parse kubeconfig
 	config, err := rest.InClusterConfig() // creates the in-cluster config
@@ -131,7 +132,7 @@ func (p *podRestarter) verifyPendingPodExists(pod, namespace string) (*v1.Pod, e
 	)
 	if e.IsNotFound(err) {
 		msg := fmt.Sprintf("Pod %s/%s does not exist anymore", namespace, pod)
-		return nil, errors.New(msg)
+		return podStruct, errors.New(msg)
 	} else if statusError, isStatus := err.(*e.StatusError); isStatus {
 		msg := fmt.Sprintf("Error getting pod %s/%s: %v",
 			namespace, pod, statusError.ErrStatus.Message)
@@ -150,6 +151,20 @@ func (p *podRestarter) verifyPendingPodExists(pod, namespace string) (*v1.Pod, e
 		)
 		return podStruct, errors.New(msg)
 	}
+}
+
+// verify if Pod has owner/controller associated
+func (p *podRestarter) verifyPodHasOwner(pod *v1.Pod) bool {
+	result := len(pod.ObjectMeta.OwnerReferences)
+
+	if result == 0 {
+		return false
+	}
+	if result > 0 {
+		return true
+	}
+	p.errorLog.Println("Pod struct coud not be parsed") // DEBUG
+	return false
 }
 
 // deletes a Pod
@@ -177,6 +192,7 @@ var (
 	ctx             = context.TODO()
 	errorMessage    string
 	namespace       string
+	healTime        time.Duration = 5 // allow Pending Pod time to self heal (seconds)
 )
 
 func main() {
@@ -251,24 +267,30 @@ func main() {
 		// // infoLog.Printf("There are %d pending Pods: %+v", len(pendingPods), pendingPods)	// DEBUG
 		// // infoLog.Printf("There are %d errored Pods: %+v", len(pendingErroredPods), pendingErroredPods)	// DEBUG
 
-		// time.Sleep(20 * time.Second) //DEBUG allow pods to heal
+		// allow Pending Pods time to selfheal
+		time.Sleep(healTime * time.Second)
 
 		// iterate through error Pods map
 		for pod, ns := range pendingErroredPods {
 			// verify if Pod exists and is still in a Pending state
-			// var podData *v1.Pod	//DEBUG
-			_, err = p.verifyPendingPodExists(pod, ns)
-			// fmt.Printf("\n%+v\n", &podData.ObjectMeta)	//DEBUG
+			var podData *v1.Pod //DEBUG
+			podData, err = p.verifyPendingPodExists(pod, ns)
+			// infoLog.Printf("Owner: %+v\n", len(podData.ObjectMeta.OwnerReferences)) //DEBUG
 			if err != nil {
 				errorLog.Println(err)
 			} else {
-				// delete Pod
-				err := p.deletePod(pod, ns)
-				if err != nil {
-					errorLog.Println(err)
+				// verify Pod has owner/controller
+				if p.verifyPodHasOwner(podData) {
+					// delete Pod
+					err := p.deletePod(pod, ns)
+					if err != nil {
+						errorLog.Println(err)
+					}
+				} else {
+					infoLog.Printf("Pod cannot be deleted because it does not have owner/controller: %s/%s\n%+v", ns, pod, podData.ObjectMeta.OwnerReferences)
 				}
 			}
 		}
-		time.Sleep(time.Duration(pollingInterval) * time.Second) // sleep for n seconds
+		time.Sleep(time.Duration(pollingInterval-int(healTime)) * time.Second) // sleep for n seconds
 	}
 }
