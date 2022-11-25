@@ -2,3 +2,9 @@
 .gitignore
 *.yaml
 *.json
+k8s
+.github
+LICENSE
+.debug
+.git
+.cache
