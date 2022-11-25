@@ -54,3 +54,7 @@ while True; do task generate-pending-pods; sleep 30; done
 # check app logs
 kubectl logs -l app=pod-restarter -f
 ```
+
+### TBD
+- verify namespace exists ?
+- add struct for podEvent data
