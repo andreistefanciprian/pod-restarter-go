@@ -49,7 +49,8 @@ task uninstall
 
 ```
 # generate Pending pods
-while True; do task generate-pending-pods; sleep 30; done
+cd k8s/tests
+bash generate_pending_pods.sh
 
 # check app logs
 kubectl logs -l app=pod-restarter -f
@@ -57,4 +58,3 @@ kubectl logs -l app=pod-restarter -f
 
 ### TBD
 - verify namespace exists ?
-- add struct for podEvent data

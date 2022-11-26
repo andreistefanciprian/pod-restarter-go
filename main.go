@@ -30,7 +30,7 @@ import (
 	"k8s.io/client-go/util/homedir"
 )
 
-// podRestarter holds k8s parameters
+// podRestarter holds K8s parameters
 type podRestarter struct {
 	errorLog   *log.Logger
 	infoLog    *log.Logger
@@ -39,15 +39,28 @@ type podRestarter struct {
 	clientset  *kubernetes.Clientset
 }
 
+// podDetails holds data associated with a Pod
 type podDetails struct {
-	name, namespace   string
+	podName           string
+	podNamespace      string
 	hasOwner          bool
 	ownerData         interface{}
 	phase             v1.PodPhase
-	CreationTimestamp time.Time
+	creationTimestamp time.Time
 }
 
-// dscover if kubeconfig creds are inside a Pod or outside the cluster
+// podEvent holds events data associated with a Pod
+type podEvent struct {
+	podName        string
+	podNamespace   string
+	eventType      string
+	reason         string
+	message        string
+	firstTimestamp time.Time
+	lastTimestamp  time.Time
+}
+
+// discover if kubeconfig creds are inside a Pod or outside the cluster
 func (p *podRestarter) k8sClient() (*kubernetes.Clientset, error) {
 	// read and parse kubeconfig
 	config, err := rest.InClusterConfig() // creates the in-cluster config
@@ -97,11 +110,12 @@ func (p *podRestarter) getPendingPods(namespace string) (map[string]string, erro
 	return pendingPods, nil
 }
 
-// get Pod Events
-func (p *podRestarter) getPodEvents(pod, namespace string) ([]string, error) {
-	var events []string
+// returns Pod Events
+func (p *podRestarter) getPodEvents(pod, namespace string) ([]podEvent, error) {
+
 	api := p.clientset.CoreV1()
 
+	var podEvents []podEvent
 	// get Pod events
 	eventsStruct, err := api.Events(namespace).List(
 		p.ctx,
@@ -111,22 +125,31 @@ func (p *podRestarter) getPodEvents(pod, namespace string) ([]string, error) {
 		})
 
 	if err != nil {
-		msg := fmt.Sprintf("Could not go through Pod %s/%s Events: \n%v", namespace, pod, err)
-		return events, errors.New(msg)
+		msg := fmt.Sprintf("Could not go through Pod's Events: %s/%s\n%s", namespace, pod, err)
+		return podEvents, errors.New(msg)
 	}
 
 	for _, item := range eventsStruct.Items {
-		events = append(events, item.Message)
+		podEventData := podEvent{
+			podName:        item.InvolvedObject.Name,
+			podNamespace:   item.InvolvedObject.Namespace,
+			reason:         item.Reason,
+			eventType:      item.Type,
+			message:        item.Message,
+			firstTimestamp: item.FirstTimestamp.Time,
+			lastTimestamp:  item.LastTimestamp.Time,
+		}
+		podEvents = append(podEvents, podEventData)
 	}
 
-	if len(events) == 0 {
+	if len(podEvents) == 0 {
 		msg := fmt.Sprintf(
 			"Pod has 0 Events. Probably it does not exist or it does not have any events in the last hour: %s/%s",
 			namespace, pod,
 		)
-		return events, errors.New(msg)
+		return podEvents, errors.New(msg)
 	}
-	return events, nil
+	return podEvents, nil
 }
 
 // get Pod details
@@ -153,11 +176,11 @@ func (p *podRestarter) getPodDetails(pod, namespace string) (*podDetails, error)
 		return &podData, errors.New(msg)
 	}
 	podData = podDetails{
-		name:              podRawData.ObjectMeta.Name,
-		namespace:         podRawData.ObjectMeta.Namespace,
+		podName:           podRawData.ObjectMeta.Name,
+		podNamespace:      podRawData.ObjectMeta.Namespace,
 		phase:             podRawData.Status.Phase,
 		ownerData:         podRawData.ObjectMeta.OwnerReferences,
-		CreationTimestamp: podRawData.ObjectMeta.CreationTimestamp.Time,
+		creationTimestamp: podRawData.ObjectMeta.CreationTimestamp.Time,
 	}
 
 	if len(podRawData.ObjectMeta.OwnerReferences) > 0 {
@@ -243,7 +266,8 @@ func main() {
 		} else {
 			for pod, ns := range pendingPods {
 
-				// get Pod events
+				// get Pod event
+				var events []podEvent
 				events, err := p.getPodEvents(pod, ns)
 				if err != nil {
 					errorLog.Println(err)
@@ -251,8 +275,8 @@ func main() {
 				// if error message is in events
 				// append Pod to map
 				for _, event := range events {
-					if strings.Contains(event, errorMessage) {
-						infoLog.Printf("Pod %s/%s has error: \n%s", ns, pod, event)
+					if strings.Contains(event.message, errorMessage) {
+						infoLog.Printf("Pod %s/%s has error: \n%s", ns, pod, event.message)
 						pendingErroredPods[pod] = ns
 						break // break after seeing message only once in the events
 					}
@@ -286,8 +310,8 @@ func main() {
 						}
 					} else {
 						infoLog.Printf(
-							"Pod cannot be deleted because it DOES NOT HAVE OWNER/CONTROLLER: %s/%s\n%+v",
-							ns, pod, podInfo.ownerData,
+							"Pod cannot be deleted because it DOES NOT HAVE OWNER: %s/%s",
+							ns, pod,
 						)
 					}
 				} else {
