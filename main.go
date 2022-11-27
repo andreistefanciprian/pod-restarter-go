@@ -75,12 +75,9 @@ func main() {
 		}
 
 		var pendingPods []podDetails
-		// var pendingPodsData1 []podDetails
-		// var pendingPodsData2 []podDetails
 		var pendingErroredPods = make(map[string]string)
 
 		pendingPods, err = p.getPendingPods(namespace)
-		// fmt.Printf("Total number of Pending Pods:\n%+v", pendingPods)
 		if err != nil {
 			errorLog.Println(err)
 		} else {
