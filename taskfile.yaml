@@ -21,8 +21,8 @@ tasks:
 
   install:
     cmds:
-      - helm template --set image.digest={{.DOCKER_TAG}} {{.APP_NAME}} k8s/helm_chart
-      - helm upgrade --install --set image.digest={{.DOCKER_TAG}} {{.APP_NAME}} k8s/helm_chart
+      - helm template --namespace default --set image.digest={{.DOCKER_TAG}} {{.APP_NAME}} k8s/helm_chart
+      - helm upgrade --namespace default --install --set image.digest={{.DOCKER_TAG}} {{.APP_NAME}} k8s/helm_chart
       
     vars:
       DOCKER_TAG:
