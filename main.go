@@ -74,36 +74,60 @@ func main() {
 			p.clientset = clientset
 		}
 
-		var pendingPods = make(map[string]string)
+		var pendingPods []podDetails
+		// var pendingPodsData1 []podDetails
+		// var pendingPodsData2 []podDetails
 		var pendingErroredPods = make(map[string]string)
 
 		pendingPods, err = p.getPendingPods(namespace)
+		// fmt.Printf("Total number of Pending Pods:\n%+v", pendingPods)
 		if err != nil {
 			errorLog.Println(err)
-			// continue
 		} else {
-			for pod, ns := range pendingPods {
 
-				// get Pod event
-				var events []podEvent
-				events, err := p.getPodEvents(pod, ns)
-				if err != nil {
-					errorLog.Println(err)
-				}
-				// if error message is in events
-				// append Pod to map
-				for _, event := range events {
-					if strings.Contains(event.message, errorMessage) {
-						infoLog.Printf("Pod %s/%s has error: \n%s", ns, pod, event.message)
-						pendingErroredPods[pod] = ns
-						break // break after seeing message only once in the events
+			// check if Pending Pods have error message
+			for _, pod := range pendingPods {
+
+				// skip Pods without owner of Pods that were delted or merked to be deleted
+				if pod.hasOwner {
+					if pod.deletionTimestamp == nil {
+						// get Pod event
+						var events []podEvent
+						events, err := p.getPodEvents(pod.podName, pod.podNamespace)
+						if err != nil {
+							errorLog.Println(err)
+						}
+						// if error message is in events
+						// append Pod to map
+						for _, event := range events {
+							if strings.Contains(event.message, errorMessage) {
+								infoLog.Printf("Pod %s/%s has error: \n%s", pod.podNamespace, pod.podName, event.message)
+								pendingErroredPods[pod.podName] = pod.podNamespace
+								break // break after seeing message only once in the events
+							}
+						}
+
+					} else {
+						errorLog.Printf(
+							"Pod has already been deleted/scheduled to be deleted: %s/%s\n%v",
+							pod.podNamespace,
+							pod.podName,
+							pod.deletionTimestamp,
+						)
 					}
+				} else {
+					p.errorLog.Printf(
+						"Pod does not have owner: %s/%s",
+						pod.podNamespace,
+						pod.podName,
+					)
 				}
 			}
 			infoLog.Printf(
 				"There is a TOTAL of %d/%d Pods in Pending State with error message: %s",
 				len(pendingErroredPods), len(pendingPods), errorMessage,
 			)
+
 		}
 
 		// allow Pending Pods time to self heal
@@ -119,18 +143,11 @@ func main() {
 			} else {
 				if podInfo.phase == "Pending" {
 					infoLog.Printf("Pod still in Pending state: %s/%s", ns, pod)
-					// verify Pod has owner/controller
-					if podInfo.hasOwner {
-						// delete Pod
-						err := p.deletePod(pod, ns)
-						if err != nil {
-							errorLog.Println(err)
-						}
-					} else {
-						infoLog.Printf(
-							"Pod cannot be deleted because it DOES NOT HAVE OWNER: %s/%s",
-							ns, pod,
-						)
+
+					// delete Pod
+					err := p.deletePod(pod, ns)
+					if err != nil {
+						errorLog.Println(err)
 					}
 				} else {
 					infoLog.Printf("Pod HAS NEW STATE %s: %s/%s", podInfo.phase, ns, pod)

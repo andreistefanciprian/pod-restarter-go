@@ -71,11 +71,11 @@ func (p *podRestarter) k8sClient() (*kubernetes.Clientset, error) {
 }
 
 // returns a map with Pending Pods (podName:podNamespace)
-func (p *podRestarter) getPendingPods(namespace string) (map[string]string, error) {
+func (p *podRestarter) getPendingPods(namespace string) ([]podDetails, error) {
 	api := p.clientset.CoreV1()
 	var podData podDetails
-
-	var pendingPods = make(map[string]string)
+	var podsData []podDetails
+	// var pendingPods = make(map[string]string)
 
 	// list all Pods in Pending state
 	pods, err := api.Pods(namespace).List(
@@ -87,7 +87,7 @@ func (p *podRestarter) getPendingPods(namespace string) (map[string]string, erro
 	)
 	if err != nil {
 		msg := fmt.Sprintf("Could not get a list of Pending Pods: \n%v", err)
-		return pendingPods, errors.New(msg)
+		return podsData, errors.New(msg)
 	}
 
 	for _, pod := range pods.Items {
@@ -99,31 +99,16 @@ func (p *podRestarter) getPendingPods(namespace string) (map[string]string, erro
 			creationTimestamp: pod.ObjectMeta.CreationTimestamp.Time,
 			deletionTimestamp: pod.ObjectMeta.DeletionTimestamp,
 		}
+
 		// check if Pod has owner/controller
 		if len(pod.ObjectMeta.OwnerReferences) > 0 {
 			podData.hasOwner = true
 		}
 
-		if pod.DeletionTimestamp != nil {
-			p.errorLog.Printf(
-				"Pod has already been deleted: %s/%s\n%v",
-				pod.ObjectMeta.Namespace,
-				pod.ObjectMeta.Name,
-				pod.ObjectMeta.DeletionTimestamp,
-			)
-		} else if podData.hasOwner {
-			p.infoLog.Printf("Pod %s/%s is in Pending state", pod.ObjectMeta.Namespace, pod.ObjectMeta.Name)
-			pendingPods[pod.ObjectMeta.Name] = pod.ObjectMeta.Namespace
-		} else {
-			p.errorLog.Printf(
-				"Pod is in Pending state but does not have owner: %s/%s",
-				pod.ObjectMeta.Namespace,
-				pod.ObjectMeta.Name,
-			)
-		}
+		podsData = append(podsData, podData)
 	}
-	p.infoLog.Printf("There is a TOTAL of %d Pods in Pending state in the cluster\n", len(pendingPods))
-	return pendingPods, nil
+	p.infoLog.Printf("There is a TOTAL of %d Pods in Pending state in the cluster\n", len(podsData))
+	return podsData, nil
 }
 
 // returns Pod Events
