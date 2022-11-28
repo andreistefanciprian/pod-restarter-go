@@ -12,7 +12,7 @@ tasks:
 
   uninstall:
     cmds:
-      - helm uninstall {{.APP_NAME}}
+      - helm uninstall --namespace default {{.APP_NAME}}
 
   build:
     cmds:
