@@ -6,7 +6,7 @@ podRestarter:
   # errorMessage: 'Failed to pull image "wrongimage"'
   errorMessage: Back-off pulling image
   # errorMessage: container veth name provided (eth0) already exists
-  pollInterval: 10
+  pollInterval: 30
   namespace: ""
   # namespace: "default"
 

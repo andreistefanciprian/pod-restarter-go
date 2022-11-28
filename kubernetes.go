@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
@@ -15,10 +14,15 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+type Logger interface {
+	Print(v ...any)
+	Println(v ...any)
+	Printf(format string, v ...any)
+}
+
 // podRestarter holds K8s parameters
 type podRestarter struct {
-	errorLog   *log.Logger
-	infoLog    *log.Logger
+	logger     Logger
 	kubeconfig *string
 	ctx        context.Context
 	clientset  *kubernetes.Clientset
@@ -56,9 +60,9 @@ func (p *podRestarter) k8sClient() (*kubernetes.Clientset, error) {
 			msg := fmt.Sprintf("The kubeconfig cannot be loaded: %v\n", err)
 			return nil, errors.New(msg)
 		}
-		p.infoLog.Println("Running from OUTSIDE the cluster")
+		p.logger.Println("Running from OUTSIDE the cluster")
 	} else {
-		p.infoLog.Println("Running from INSIDE the cluster")
+		p.logger.Println("Running from INSIDE the cluster")
 	}
 
 	// create the clientset
@@ -107,7 +111,7 @@ func (p *podRestarter) getPendingPods(namespace string) ([]podDetails, error) {
 
 		podsData = append(podsData, podData)
 	}
-	p.infoLog.Printf("There is a TOTAL of %d Pods in Pending state in the cluster\n", len(podsData))
+	p.logger.Printf("There is a TOTAL of %d Pods in Pending state in the cluster\n", len(podsData))
 	return podsData, nil
 }
 
@@ -202,6 +206,6 @@ func (p *podRestarter) deletePod(pod, namespace string) error {
 	if err != nil {
 		return err
 	}
-	p.infoLog.Printf("DELETED Pod %s/%s", namespace, pod)
+	p.logger.Printf("DELETED Pod %s/%s", namespace, pod)
 	return nil
 }
