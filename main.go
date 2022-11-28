@@ -25,8 +25,6 @@ import (
 
 // define variables
 var (
-	infoLog         = log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
-	errorLog        = log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
 	pollingInterval int
 	kubeconfig      *string
 	ctx             = context.TODO()
@@ -56,11 +54,10 @@ func main() {
 	for {
 
 		fmt.Println("\n############## POD-RESTARTER ##############")
-		infoLog.Printf("Running every %d seconds", pollingInterval)
+		log.Printf("Running every %d seconds", pollingInterval)
 
 		p := &podRestarter{
-			errorLog:   errorLog,
-			infoLog:    infoLog,
+			logger:     log.Default(),
 			kubeconfig: kubeconfig,
 			ctx:        ctx,
 		}
@@ -68,7 +65,7 @@ func main() {
 		// authenticate to k8s cluster and initialise k8s client
 		clientset, err := p.k8sClient()
 		if err != nil {
-			errorLog.Println(err)
+			log.Println(err)
 			os.Exit(1)
 		} else {
 			p.clientset = clientset
@@ -79,7 +76,7 @@ func main() {
 
 		pendingPods, err = p.getPendingPods(namespace)
 		if err != nil {
-			errorLog.Println(err)
+			log.Println(err)
 		} else {
 
 			// check if Pending Pods have error message
@@ -92,20 +89,20 @@ func main() {
 						var events []podEvent
 						events, err := p.getPodEvents(pod.podName, pod.podNamespace)
 						if err != nil {
-							errorLog.Println(err)
+							log.Println(err)
 						}
 						// if error message is in events
 						// append Pod to map
 						for _, event := range events {
 							if strings.Contains(event.message, errorMessage) {
-								infoLog.Printf("Pod %s/%s has error: \n%s", pod.podNamespace, pod.podName, event.message)
+								log.Printf("Pod %s/%s has error: \n%s", pod.podNamespace, pod.podName, event.message)
 								pendingErroredPods[pod.podName] = pod.podNamespace
 								break // break after seeing message only once in the events
 							}
 						}
 
 					} else {
-						errorLog.Printf(
+						log.Printf(
 							"Pod has already been deleted/scheduled to be deleted: %s/%s\n%v",
 							pod.podNamespace,
 							pod.podName,
@@ -113,14 +110,14 @@ func main() {
 						)
 					}
 				} else {
-					p.errorLog.Printf(
+					log.Printf(
 						"Pod does not have owner: %s/%s",
 						pod.podNamespace,
 						pod.podName,
 					)
 				}
 			}
-			infoLog.Printf(
+			log.Printf(
 				"There is a TOTAL of %d/%d Pods in Pending State with error message: %s",
 				len(pendingErroredPods), len(pendingPods), errorMessage,
 			)
@@ -136,18 +133,18 @@ func main() {
 			var podInfo *podDetails
 			podInfo, err = p.getPodDetails(pod, ns)
 			if err != nil {
-				errorLog.Println(err)
+				log.Println(err)
 			} else {
 				if podInfo.phase == "Pending" {
-					infoLog.Printf("Pod still in Pending state: %s/%s", ns, pod)
+					log.Printf("Pod still in Pending state: %s/%s", ns, pod)
 
 					// delete Pod
 					err := p.deletePod(pod, ns)
 					if err != nil {
-						errorLog.Println(err)
+						log.Println(err)
 					}
 				} else {
-					infoLog.Printf("Pod HAS NEW STATE %s: %s/%s", podInfo.phase, ns, pod)
+					log.Printf("Pod HAS NEW STATE %s: %s/%s", podInfo.phase, ns, pod)
 				}
 			}
 		}
