@@ -4,7 +4,7 @@ for (( c=1; c<=500; c++ ))
 do
     echo -e "\n\nThis is iteration number $c"
     # for ns in `kubectl get namespaces --no-headers | awk '{print $1}'`; do
-    for ns in test1 test2; do
+    for ns in test1 test2 test3; do
         echo Create namespace $ns
         kubectl create ns $ns --dry-run=client -o yaml | kubectl apply -f -
         

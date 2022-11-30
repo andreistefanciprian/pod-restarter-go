@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	k8s "github.com/andreistefanciprian/pod-restarter-go/kubernetes"
 	"k8s.io/client-go/util/homedir"
 )
 
@@ -56,25 +57,25 @@ func main() {
 		fmt.Println("\n############## POD-RESTARTER ##############")
 		log.Printf("Running every %d seconds", pollingInterval)
 
-		p := &podRestarter{
-			logger:     log.Default(),
-			kubeconfig: kubeconfig,
-			ctx:        ctx,
+		p := &k8s.PodRestarter{
+			Logger:     log.Default(),
+			Kubeconfig: kubeconfig,
+			Ctx:        ctx,
 		}
 
 		// authenticate to k8s cluster and initialise k8s client
-		clientset, err := p.k8sClient()
+		clientset, err := p.K8sClient()
 		if err != nil {
 			log.Println(err)
 			os.Exit(1)
 		} else {
-			p.clientset = clientset
+			p.Clientset = clientset
 		}
 
-		var pendingPods []podDetails
+		var pendingPods []k8s.PodDetails
 		var pendingErroredPods = make(map[string]string)
 
-		pendingPods, err = p.getPendingPods(namespace)
+		pendingPods, err = p.GetPendingPods(namespace)
 		if err != nil {
 			log.Println(err)
 		} else {
@@ -83,20 +84,20 @@ func main() {
 			for _, pod := range pendingPods {
 
 				// skip Pods without owner of Pods that were delted or merked to be deleted
-				if pod.hasOwner {
-					if pod.deletionTimestamp == nil {
+				if pod.HasOwner {
+					if pod.DeletionTimestamp == nil {
 						// get Pod event
-						var events []podEvent
-						events, err := p.getPodEvents(pod.podName, pod.podNamespace)
+						var events []k8s.PodEvent
+						events, err := p.GetPodEvents(pod.PodName, pod.PodNamespace)
 						if err != nil {
 							log.Println(err)
 						}
 						// if error message is in events
 						// append Pod to map
 						for _, event := range events {
-							if strings.Contains(event.message, errorMessage) {
-								log.Printf("Pod %s/%s has error: \n%s", pod.podNamespace, pod.podName, event.message)
-								pendingErroredPods[pod.podName] = pod.podNamespace
+							if strings.Contains(event.Message, errorMessage) {
+								log.Printf("Pod %s/%s has error: \n%s", pod.PodNamespace, pod.PodName, event.Message)
+								pendingErroredPods[pod.PodName] = pod.PodNamespace
 								break // break after seeing message only once in the events
 							}
 						}
@@ -104,16 +105,16 @@ func main() {
 					} else {
 						log.Printf(
 							"Pod has already been deleted/scheduled to be deleted: %s/%s\n%v",
-							pod.podNamespace,
-							pod.podName,
-							pod.deletionTimestamp,
+							pod.PodNamespace,
+							pod.PodName,
+							pod.DeletionTimestamp,
 						)
 					}
 				} else {
 					log.Printf(
 						"Pod does not have owner: %s/%s",
-						pod.podNamespace,
-						pod.podName,
+						pod.PodNamespace,
+						pod.PodName,
 					)
 				}
 			}
@@ -130,21 +131,21 @@ func main() {
 		// iterate through errored Pods map
 		for pod, ns := range pendingErroredPods {
 			// verify if Pod exists and is still in a Pending state
-			var podInfo *podDetails
-			podInfo, err = p.getPodDetails(pod, ns)
+			var podInfo *k8s.PodDetails
+			podInfo, err = p.GetPodDetails(pod, ns)
 			if err != nil {
 				log.Println(err)
 			} else {
-				if podInfo.phase == "Pending" {
+				if podInfo.Phase == "Pending" {
 					log.Printf("Pod still in Pending state: %s/%s", ns, pod)
 
 					// delete Pod
-					err := p.deletePod(pod, ns)
+					err := p.DeletePod(pod, ns)
 					if err != nil {
 						log.Println(err)
 					}
 				} else {
-					log.Printf("Pod HAS NEW STATE %s: %s/%s", podInfo.phase, ns, pod)
+					log.Printf("Pod HAS NEW STATE %s: %s/%s", podInfo.Phase, ns, pod)
 				}
 			}
 		}
