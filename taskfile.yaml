@@ -6,9 +6,9 @@ env:
 
 tasks:
 
-  generate-pending-pods:
-    cmds:
-      - bash k8s-infra/generate_pending_pods.sh
+  # generate-pending-pods:
+  #   cmds:
+  #     - cd infra/tests; bash generate_pending_pods.sh
 
   uninstall:
     cmds:
@@ -16,13 +16,13 @@ tasks:
 
   build:
     cmds:
-      - docker build -t {{.DOCKER_IMAGE}} .
+      - docker build -t {{.DOCKER_IMAGE}} . -f infra/Dockerfile
       - docker image push {{.DOCKER_IMAGE}}
 
   install:
     cmds:
-      - helm template --namespace default --set image.digest={{.DOCKER_TAG}} {{.APP_NAME}} k8s-infra/helm_chart
-      - helm upgrade --namespace default --install --set image.digest={{.DOCKER_TAG}} {{.APP_NAME}} k8s-infra/helm_chart
+      - helm template --namespace default --set image.digest={{.DOCKER_TAG}} {{.APP_NAME}} infra/helm_chart
+      - helm upgrade --namespace default --install --set image.digest={{.DOCKER_TAG}} {{.APP_NAME}} infra/helm_chart
       
     vars:
       DOCKER_TAG:
