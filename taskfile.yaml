@@ -6,9 +6,9 @@ env:
 
 tasks:
 
-  generate-pending-pods:
-    cmds:
-      - bash infra/tests/generate_pending_pods.sh
+  # generate-pending-pods:
+  #   cmds:
+  #     - cd infra/tests; bash generate_pending_pods.sh
 
   uninstall:
     cmds:
