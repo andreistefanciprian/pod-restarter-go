@@ -8,7 +8,7 @@ tasks:
 
   generate-pending-pods:
     cmds:
-      - bash k8s/generate_pending_pods.sh
+      - bash k8s-infra/generate_pending_pods.sh
 
   uninstall:
     cmds:
@@ -21,8 +21,8 @@ tasks:
 
   install:
     cmds:
-      - helm template --namespace default --set image.digest={{.DOCKER_TAG}} {{.APP_NAME}} k8s/helm_chart
-      - helm upgrade --namespace default --install --set image.digest={{.DOCKER_TAG}} {{.APP_NAME}} k8s/helm_chart
+      - helm template --namespace default --set image.digest={{.DOCKER_TAG}} {{.APP_NAME}} k8s-infra/helm_chart
+      - helm upgrade --namespace default --install --set image.digest={{.DOCKER_TAG}} {{.APP_NAME}} k8s-infra/helm_chart
       
     vars:
       DOCKER_TAG:

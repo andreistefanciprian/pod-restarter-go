@@ -49,7 +49,7 @@ task uninstall
 
 ```
 # generate Pending pods
-cd k8s/tests
+cd k8s-infra/tests
 bash generate_pending_pods.sh
 
 # check app logs
