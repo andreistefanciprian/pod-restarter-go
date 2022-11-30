@@ -2,7 +2,7 @@
 .gitignore
 *.yaml
 *.json
-k8s-infra
+infra
 .github
 LICENSE
 .debug
