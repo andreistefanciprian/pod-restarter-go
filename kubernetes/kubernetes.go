@@ -27,7 +27,7 @@ func (p *PodRestarter) K8sClient() (*kubernetes.Clientset, error) {
 		p.Logger.Println("Running from INSIDE the cluster")
 	}
 
-	// create the clientset
+	// create the clientset for in-cluster/out-cluster config
 	p.Clientset, err = kubernetes.NewForConfig(config)
 	if err != nil {
 		msg := fmt.Sprintf("The clientset cannot be created: %v\n", err)
@@ -41,7 +41,6 @@ func (p *PodRestarter) GetPendingPods(namespace string) ([]PodDetails, error) {
 	api := p.Clientset.CoreV1()
 	var podData PodDetails
 	var podsData []PodDetails
-	// var pendingPods = make(map[string]string)
 
 	// list all Pods in Pending state
 	pods, err := api.Pods(namespace).List(
@@ -58,8 +57,10 @@ func (p *PodRestarter) GetPendingPods(namespace string) ([]PodDetails, error) {
 
 	for _, pod := range pods.Items {
 		podData = PodDetails{
+			UID:               pod.ObjectMeta.UID,
 			PodName:           pod.ObjectMeta.Name,
 			PodNamespace:      pod.ObjectMeta.Namespace,
+			ResourceVersion:   pod.ObjectMeta.ResourceVersion,
 			Phase:             pod.Status.Phase,
 			OwnerData:         pod.ObjectMeta.OwnerReferences,
 			CreationTimestamp: pod.ObjectMeta.CreationTimestamp.Time,
@@ -98,13 +99,15 @@ func (p *PodRestarter) GetPodEvents(pod, namespace string) ([]PodEvent, error) {
 
 	for _, item := range eventsStruct.Items {
 		podEventData := PodEvent{
-			PodName:        item.InvolvedObject.Name,
-			PodNamespace:   item.InvolvedObject.Namespace,
-			Reason:         item.Reason,
-			EventType:      item.Type,
-			Message:        item.Message,
-			FirstTimestamp: item.FirstTimestamp.Time,
-			LastTimestamp:  item.LastTimestamp.Time,
+			UID:             item.InvolvedObject.UID,
+			PodName:         item.InvolvedObject.Name,
+			PodNamespace:    item.InvolvedObject.Namespace,
+			ResourceVersion: item.InvolvedObject.ResourceVersion,
+			Reason:          item.Reason,
+			EventType:       item.Type,
+			Message:         item.Message,
+			FirstTimestamp:  item.FirstTimestamp.Time,
+			LastTimestamp:   item.LastTimestamp.Time,
 		}
 		podEvents = append(podEvents, podEventData)
 	}
