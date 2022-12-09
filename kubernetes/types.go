@@ -6,6 +6,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	types "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -25,8 +26,10 @@ type PodRestarter struct {
 
 // podDetails holds data associated with a Pod
 type PodDetails struct {
+	UID               types.UID
 	PodName           string
 	PodNamespace      string
+	ResourceVersion   string
 	HasOwner          bool
 	OwnerData         interface{}
 	Phase             v1.PodPhase
@@ -36,11 +39,13 @@ type PodDetails struct {
 
 // podEvent holds events data associated with a Pod
 type PodEvent struct {
-	PodName        string
-	PodNamespace   string
-	EventType      string
-	Reason         string
-	Message        string
-	FirstTimestamp time.Time
-	LastTimestamp  time.Time
+	UID             types.UID
+	PodName         string
+	PodNamespace    string
+	ResourceVersion string
+	EventType       string
+	Reason          string
+	Message         string
+	FirstTimestamp  time.Time
+	LastTimestamp   time.Time
 }
