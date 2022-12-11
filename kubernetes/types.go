@@ -24,20 +24,20 @@ type PodRestarter struct {
 	Clientset  *kubernetes.Clientset
 }
 
-// podDetails holds data associated with a Pod
+// PodDetails holds data associated with a Pod
 type PodDetails struct {
 	UID               types.UID
 	PodName           string
 	PodNamespace      string
 	ResourceVersion   string
-	HasOwner          bool
-	OwnerData         interface{}
+	OwnerReferences   []metav1.OwnerReference
 	Phase             v1.PodPhase
+	ContainerStatuses []v1.ContainerStatus
 	CreationTimestamp time.Time
 	DeletionTimestamp *metav1.Time
 }
 
-// podEvent holds events data associated with a Pod
+// PodEvent holds events data associated with a Pod
 type PodEvent struct {
 	UID             types.UID
 	PodName         string
