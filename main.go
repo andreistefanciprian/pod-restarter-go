@@ -1,23 +1,14 @@
 // This script runs in/out a K8s cluster
-// Deletes Pods that are in a Pending state due to a particular error
-
-// The script goes through this sequence of steps:
-// - get an array of all Pending Pods that have the error event
-// - for each Pending Pod that has the error event
-//   - delete the Pod if it still exists and in a Pending state
-//
-// Script executes the above steps every n seconds
+// Deletes Pods that are in a Failing state due to a particular Event Reason (eg: FailedCreatePodSandBox)
 
 package main
 
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	k8s "github.com/andreistefanciprian/pod-restarter-go/kubernetes"
@@ -30,15 +21,18 @@ var (
 	kubeconfig      *string
 	ctx             = context.TODO()
 	errorMessage    string
+	eventReason     string
 	namespace       string
+	dryRunMode      bool
 	healTime        time.Duration = 5 // allow Pending Pod time to self heal (seconds)
 )
 
-func main() {
-
+func initFlags() {
 	// define and parse cli params
+	flag.BoolVar(&dryRunMode, "dry-run", false, "enable dry run mode (no changes are made, only logged)")
 	flag.StringVar(&namespace, "namespace", "", "kubernetes namespace")
-	flag.IntVar(&pollingInterval, "polling-interval", 10, "number of seconds between iterations")
+	flag.StringVar(&eventReason, "reason", "FailedCreatePodSandBox", "restart Pods that match Event Reason")
+	flag.IntVar(&pollingInterval, "polling-interval", 30, "number of seconds between iterations")
 	flag.StringVar(
 		&errorMessage,
 		"error-message",
@@ -50,17 +44,24 @@ func main() {
 	} else {
 		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 	}
+}
+
+func main() {
+
+	// parse CLI params
+	initFlags()
 	flag.Parse()
 
-	for {
+	// we use this counter in first iteration where we look at all Events in the cluster
+	// if counter > 0 we filter out events older than polling interval
+	counter := 0
 
-		fmt.Println("\n############## POD-RESTARTER ##############")
+	for {
 		log.Printf("Running every %d seconds", pollingInterval)
 
 		p := &k8s.PodRestarter{
 			Logger:     log.Default(),
 			Kubeconfig: kubeconfig,
-			Ctx:        ctx,
 		}
 
 		// authenticate to k8s cluster and initialise k8s client
@@ -72,83 +73,55 @@ func main() {
 			p.Clientset = clientset
 		}
 
-		var pendingPods []k8s.PodDetails
-		var pendingErroredPods = make(map[string]string)
-
-		pendingPods, err = p.GetPendingPods(namespace)
+		// get a list of Events that match Reason
+		eventList, err := p.GetEvents(ctx, namespace, eventReason)
 		if err != nil {
 			log.Println(err)
-		} else {
+		}
 
-			// check if Pending Pods have error message
-			for _, pod := range pendingPods {
+		// Filter out Events that are older than polling interval
+		eventMaxAge := time.Now().Add(-time.Duration(pollingInterval) * time.Second)
+		if counter > 0 {
+			eventList = k8s.RemoveOlderEvents(eventList, eventMaxAge)
+		}
 
-				// skip Pods without owner of Pods that were delted or merked to be deleted
-				if pod.HasOwner {
-					if pod.DeletionTimestamp == nil {
-						// get Pod event
-						var events []k8s.PodEvent
-						events, err := p.GetPodEvents(pod.PodName, pod.PodNamespace)
+		log.Printf("There is a total of %d Events with Reason: %s", len(eventList), eventReason) // DEBUG
+
+		// generate a unique list of Pods that match Event Reason
+		// we do this because a Pod might have multiple Events with the same Reason
+		uniquePodList := k8s.GetUniqueListOfPods(eventList)
+
+		// allow Pending Pods a few seconds to self heal
+		time.Sleep(healTime * time.Second)
+
+		// iterate through the list of Pods that match Event Reason
+		for pod, ns := range uniquePodList {
+
+			// verify if Pod exists and is still in a Pending state
+			var podInfo *k8s.PodDetails
+			podInfo, err = p.GetPodDetails(ctx, pod, ns)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+
+			if k8s.VerifyPodHasOwner(*podInfo) {
+				if !k8s.VerifyPodWasDeleted(*podInfo) {
+					if !k8s.VerifyPodStatus(*podInfo) {
+						if dryRunMode {
+							log.Printf("[DRY-RUN]: Would have deleted Pod: %s/%s", ns, pod)
+							continue
+						}
+						// delete Pod
+						err := p.DeletePod(ctx, pod, ns)
 						if err != nil {
 							log.Println(err)
 						}
-						// if error message is in events
-						// append Pod to map
-						for _, event := range events {
-							if strings.Contains(event.Message, errorMessage) {
-								log.Printf("Pod %s/%s has error: \n%s", pod.PodNamespace, pod.PodName, event.Message)
-								pendingErroredPods[pod.PodName] = pod.PodNamespace
-								break // break after seeing message only once in the events
-							}
-						}
-
-					} else {
-						log.Printf(
-							"Pod has already been deleted/scheduled to be deleted: %s/%s\n%v",
-							pod.PodNamespace,
-							pod.PodName,
-							pod.DeletionTimestamp,
-						)
 					}
-				} else {
-					log.Printf(
-						"Pod does not have owner: %s/%s",
-						pod.PodNamespace,
-						pod.PodName,
-					)
-				}
-			}
-			log.Printf(
-				"There is a TOTAL of %d/%d Pods in Pending State with error message: %s",
-				len(pendingErroredPods), len(pendingPods), errorMessage,
-			)
-
-		}
-
-		// allow Pending Pods time to self heal
-		time.Sleep(healTime * time.Second)
-
-		// iterate through errored Pods map
-		for pod, ns := range pendingErroredPods {
-			// verify if Pod exists and is still in a Pending state
-			var podInfo *k8s.PodDetails
-			podInfo, err = p.GetPodDetails(pod, ns)
-			if err != nil {
-				log.Println(err)
-			} else {
-				if podInfo.Phase == "Pending" {
-					log.Printf("Pod still in Pending state: %s/%s", ns, pod)
-
-					// delete Pod
-					err := p.DeletePod(pod, ns)
-					if err != nil {
-						log.Println(err)
-					}
-				} else {
-					log.Printf("Pod HAS NEW STATE %s: %s/%s", podInfo.Phase, ns, pod)
 				}
 			}
 		}
 		time.Sleep(time.Duration(pollingInterval-int(healTime)) * time.Second) // sleep for n seconds
+		counter += 1
 	}
 }
