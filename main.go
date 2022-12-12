@@ -74,7 +74,7 @@ func main() {
 		}
 
 		// get a list of Events that match Reason
-		eventList, err := p.GetEvents(ctx, namespace, eventReason)
+		eventList, err := p.GetEvents(ctx, namespace, eventReason, errorMessage)
 		if err != nil {
 			log.Println(err)
 		}

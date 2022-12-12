@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
@@ -77,7 +78,7 @@ func (p *PodRestarter) ListPods(ctx context.Context, namespace string) (*[]PodDe
 }
 
 // GetEvents returns a list of namespaced Events that match Reason
-func (p *PodRestarter) GetEvents(ctx context.Context, namespace string, eventReason string) ([]PodEvent, error) {
+func (p *PodRestarter) GetEvents(ctx context.Context, namespace, eventReason, errorMessage string) ([]PodEvent, error) {
 	// defer timeTrack(time.Now(), "GetEvents") // calculates the time it takes to execute this method
 
 	api := p.Clientset.CoreV1()
@@ -95,9 +96,10 @@ func (p *PodRestarter) GetEvents(ctx context.Context, namespace string, eventRea
 	}
 
 	// keep only Events that match event Reason (eg: FailedCreatePodSandBox)
+	// keep only Events that have errorMessage
 	// TO ADD filter out Events older than polling interval
 	for _, item := range eventList.Items {
-		if item.Reason == eventReason {
+		if item.Reason == eventReason && strings.Contains(item.Message, errorMessage) {
 			podEventData := PodEvent{
 				UID:             item.InvolvedObject.UID,
 				PodName:         item.InvolvedObject.Name,
