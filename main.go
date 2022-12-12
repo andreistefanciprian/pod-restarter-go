@@ -91,6 +91,8 @@ func main() {
 		// we do this because a Pod might have multiple Events with the same Reason
 		uniquePodList := k8s.GetUniqueListOfPods(eventList)
 
+		log.Printf("There is a total of %d Pods with Reason: %s", len(uniquePodList), eventReason) // DEBUG
+
 		// allow Pending Pods a few seconds to self heal
 		time.Sleep(healTime * time.Second)
 
