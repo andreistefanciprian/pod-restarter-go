@@ -88,6 +88,7 @@ func (c *KubeClient) GetEvents(ctx context.Context, namespace, eventReason, erro
 		ctx,
 		metav1.ListOptions{
 			TypeMeta: metav1.TypeMeta{Kind: "Pod"},
+			// ResourceVersion: "46641835",
 		})
 
 	if err != nil {
@@ -237,6 +238,8 @@ func (c *KubeClient) GenerateToBeDeletedPodList(ctx context.Context, namespace, 
 	// generate a unique list of Pods that match Event Reason
 	// we do this because a Pod might have multiple Events with the same Reason
 	uniquePodList = GetUniqueListOfPods(eventList)
+
+	log.Printf("There is a total of %d Pods with Reason: %s", len(uniquePodList), eventReason) // DEBUG
 
 	return uniquePodList, nil
 }

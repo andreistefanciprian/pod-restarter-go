@@ -80,8 +80,6 @@ func main() {
 			log.Println(err)
 		}
 
-		log.Printf("There is a total of %d Pods with Reason: %s", len(uniquePodList), eventReason) // DEBUG
-
 		// allow Pending Pods a few seconds to self heal
 		time.Sleep(healTime * time.Second)
 
