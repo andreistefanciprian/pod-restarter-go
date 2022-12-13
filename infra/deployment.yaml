@@ -1,9 +1,14 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pod-restarter
 ---
 # Source: pod-restarter/templates/serviceaccount.yaml
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: pod-restarter
+  namespace: pod-restarter
   labels:
     app: pod-restarter
 ---
@@ -32,7 +37,7 @@ metadata:
 subjects:
 - kind: ServiceAccount
   name: pod-restarter
-  namespace: default
+  namespace: pod-restarter
 roleRef:
   kind: ClusterRole
   name: pod-restarter
@@ -45,6 +50,7 @@ metadata:
   name: pod-restarter
   labels:
     app: pod-restarter
+  namespace: pod-restarter
 spec:
   replicas: 1
   selector:
@@ -58,12 +64,13 @@ spec:
       serviceAccountName: pod-restarter
       containers:
       - name: pod-restarter
-        image: andreistefanciprian/pod-restarter-go@sha256:b8806cbdcad589ec59afbcc5ee00ddb4ac5d797186236586cfe741433982868c
+        image: andreistefanciprian/pod-restarter-go@sha256:395d6c23bda3ae66dacba4e9ea159ac7f89c607c14a8196c28d3e334639819d3
         imagePullPolicy: IfNotPresent
         args:
           - --namespace=$(NAMESPACE)
           - --polling-interval=$(POLLING_INTERVAL)
           - --error-message=$(ERROR_MESSAGE)
+          - --reason=$(EVENT_REASON)
         resources:
             limits:
               cpu: 100m
@@ -75,6 +82,8 @@ spec:
           - name: ERROR_MESSAGE
             value: Back-off pulling image
           - name: POLLING_INTERVAL
-            value: "10"
+            value: "30"
           - name: NAMESPACE
             value: ""
+          - name: EVENT_REASON
+            value: "BackOff"

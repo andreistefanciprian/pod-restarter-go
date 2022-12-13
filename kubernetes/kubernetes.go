@@ -16,33 +16,33 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// discover if kubeconfig creds are inside a Pod or outside the cluster
-func (p *PodRestarter) K8sClient() (*kubernetes.Clientset, error) {
+// discover if kubeconfig creds are inside a Pod or outside the cluster and return a clientSet
+func (c *KubeClient) NewClientSet() (*kubernetes.Clientset, error) {
 	// read and parse kubeconfig
 	config, err := rest.InClusterConfig() // creates the in-cluster config
 	if err != nil {
-		config, err = clientcmd.BuildConfigFromFlags("", *p.Kubeconfig) // creates the out-cluster config
+		config, err = clientcmd.BuildConfigFromFlags("", *c.Kubeconfig) // creates the out-cluster config
 		if err != nil {
 			msg := fmt.Sprintf("The kubeconfig cannot be loaded: %v\n", err)
 			return nil, errors.New(msg)
 		}
-		p.Logger.Println("Running from OUTSIDE the cluster")
+		c.Logger.Println("Running from OUTSIDE the cluster")
 	} else {
-		p.Logger.Println("Running from INSIDE the cluster")
+		c.Logger.Println("Running from INSIDE the cluster")
 	}
 
 	// create the clientset for in-cluster/out-cluster config
-	p.Clientset, err = kubernetes.NewForConfig(config)
+	c.Clientset, err = kubernetes.NewForConfig(config)
 	if err != nil {
 		msg := fmt.Sprintf("The clientset cannot be created: %v\n", err)
 		return nil, errors.New(msg)
 	}
-	return p.Clientset, nil
+	return c.Clientset, nil
 }
 
 // returns a list with all the Pods in the Cluster
-func (p *PodRestarter) ListPods(ctx context.Context, namespace string) (*[]PodDetails, error) {
-	api := p.Clientset.CoreV1()
+func (c *KubeClient) ListPods(ctx context.Context, namespace string) (*[]PodDetails, error) {
+	api := c.Clientset.CoreV1()
 	var podData PodDetails
 	var podsData []PodDetails
 
@@ -73,15 +73,15 @@ func (p *PodRestarter) ListPods(ctx context.Context, namespace string) (*[]PodDe
 		}
 		podsData = append(podsData, podData)
 	}
-	p.Logger.Printf("There is a TOTAL of %d Pods in the cluster\n", len(podsData))
+	c.Logger.Printf("There is a TOTAL of %d Pods in the cluster\n", len(podsData))
 	return &podsData, nil
 }
 
 // GetEvents returns a list of namespaced Events that match Reason
-func (p *PodRestarter) GetEvents(ctx context.Context, namespace, eventReason, errorMessage string) ([]PodEvent, error) {
+func (c *KubeClient) GetEvents(ctx context.Context, namespace, eventReason, errorMessage string) ([]PodEvent, error) {
 	// defer timeTrack(time.Now(), "GetEvents") // calculates the time it takes to execute this method
 
-	api := p.Clientset.CoreV1()
+	api := c.Clientset.CoreV1()
 	var podEvents []PodEvent
 
 	eventList, err := api.Events(namespace).List(
@@ -118,9 +118,9 @@ func (p *PodRestarter) GetEvents(ctx context.Context, namespace, eventReason, er
 }
 
 // returns Pod Events
-func (p *PodRestarter) GetPodEvents(ctx context.Context, pod, namespace string) ([]PodEvent, error) {
+func (c *KubeClient) GetPodEvents(ctx context.Context, pod, namespace string) ([]PodEvent, error) {
 
-	api := p.Clientset.CoreV1()
+	api := c.Clientset.CoreV1()
 
 	var podEvents []PodEvent
 	// get Pod events
@@ -162,10 +162,10 @@ func (p *PodRestarter) GetPodEvents(ctx context.Context, pod, namespace string) 
 }
 
 // returns Pod details
-func (p *PodRestarter) GetPodDetails(ctx context.Context, pod, namespace string) (*PodDetails, error) {
+func (c *KubeClient) GetPodDetails(ctx context.Context, pod, namespace string) (*PodDetails, error) {
 	// defer timeTrack(time.Now(), "GetPodDetails") // calculates the time it takes to execute this method
 
-	api := p.Clientset.CoreV1()
+	api := c.Clientset.CoreV1()
 	var item *v1.Pod
 	var podData PodDetails
 	var err error
@@ -200,8 +200,8 @@ func (p *PodRestarter) GetPodDetails(ctx context.Context, pod, namespace string)
 }
 
 // deletes a Pod
-func (p *PodRestarter) DeletePod(ctx context.Context, pod, namespace string) error {
-	api := p.Clientset.CoreV1()
+func (c *KubeClient) DeletePod(ctx context.Context, pod, namespace string) error {
+	api := c.Clientset.CoreV1()
 
 	err := api.Pods(namespace).Delete(
 		ctx,
@@ -211,81 +211,141 @@ func (p *PodRestarter) DeletePod(ctx context.Context, pod, namespace string) err
 	if err != nil {
 		return err
 	}
-	p.Logger.Printf("DELETED Pod %s/%s", namespace, pod)
+	c.Logger.Printf("DELETED Pod %s/%s", namespace, pod)
 	return nil
 }
 
-// utility functions
+// generates a map of Pods that match Event Reason and Error Message
+func (c *KubeClient) GenerateToBeDeletedPodList(ctx context.Context, namespace, eventReason, errorMessage string, counter, pollingInterval int) (map[string]string, error) {
 
-// returns true if Pod is in a healthy/Succeded state
-func VerifyPodStatus(pod PodDetails) bool {
+	var uniquePodList = make(map[string]string)
+
+	// get a list of Events that match Reason
+	eventList, err := c.GetEvents(ctx, namespace, eventReason, errorMessage)
+	if err != nil {
+		return uniquePodList, err
+	}
+
+	// Filter out Events that are older than polling interval
+	eventMaxAge := time.Now().Add(-time.Duration(pollingInterval) * time.Second)
+	if counter > 0 {
+		eventList = RemoveOlderEvents(eventList, eventMaxAge)
+	}
+
+	log.Printf("There is a total of %d Events with Reason: %s", len(eventList), eventReason) // DEBUG
+
+	// generate a unique list of Pods that match Event Reason
+	// we do this because a Pod might have multiple Events with the same Reason
+	uniquePodList = GetUniqueListOfPods(eventList)
+
+	return uniquePodList, nil
+}
+
+// returns nil if Pod
+// 1. exists
+// 2. has Owner
+// 3. has not been scheduled to be deleted
+// 4. and is not in a Healthy state (eg: Pending, Failed or Running with unhealthy containers)
+func (c *KubeClient) PodChecks(ctx context.Context, podName, podNamespace string) error {
+	// verify if Pod exists
+	podInfo, err := c.GetPodDetails(ctx, podName, podNamespace)
+	if err != nil {
+		return err
+	}
+
+	// verify Pod has owner
+	err = podInfo.VerifyPodHasOwner()
+	if err != nil {
+		return err
+	}
+
+	// verify Pod is scheduled to be deleted
+	err = podInfo.VerifyPodScheduledToBeDeleted()
+	if err != nil {
+		return err
+	}
+
+	// verify Pod is in an Unhealthy state
+	err = podInfo.VerifyPodStatus()
+	if err != nil {
+		return nil
+	} else {
+		msg := fmt.Sprintf("Pod is in a Healthy State: %s/%s", podNamespace, podName)
+		return errors.New(msg)
+	}
+}
+
+// returns error if Pod is in a Pending, Failed or Running (with unhealthy containers) state
+func (p *PodDetails) VerifyPodStatus() error {
 	// defer timeTrack(time.Now(), "VerifyPodStatus") // calculates the time it takes to execute this method
 
-	switch pod.Phase {
+	switch p.Phase {
+
 	case "Pending":
-		log.Printf(
+		msg := fmt.Sprintf(
 			"Pod is in a %s state: %s/%s",
-			pod.Phase, pod.PodNamespace, pod.PodName,
+			p.Phase, p.PodNamespace, p.PodName,
 		)
-		return false
+		return errors.New(msg)
 
 	case "Running":
-		if len(pod.ContainerStatuses) != 0 {
-			for _, cst := range pod.ContainerStatuses {
+		if len(p.ContainerStatuses) != 0 {
+			for _, cst := range p.ContainerStatuses {
 				if cst.State.Terminated == nil {
 					continue
 				}
 				if cst.State.Terminated.Reason == "Completed" && cst.State.Terminated.ExitCode == 0 {
 					continue
 				}
-				log.Printf(
+				msg := fmt.Sprintf(
 					"Pod is in a %s state and has issues: %s/%s\n%+v",
-					pod.Phase, pod.PodNamespace, pod.PodName,
-					pod.ContainerStatuses,
+					p.Phase, p.PodNamespace, p.PodName,
+					p.ContainerStatuses,
 				)
-				return false
+				return errors.New(msg)
 			}
 
 			log.Printf(
 				"Pod is in a %s state and is healthy: %s/%s",
-				pod.Phase, pod.PodNamespace, pod.PodName,
+				p.Phase, p.PodNamespace, p.PodName,
 			)
-			return true
+			return nil
 
 		}
 		log.Printf(
 			"Pod is in a %s state and has been evacuated?: %s/%s\n%+v",
-			pod.Phase, pod.PodNamespace, pod.PodName,
-			pod.ContainerStatuses,
+			p.Phase, p.PodNamespace, p.PodName,
+			p.ContainerStatuses,
 		)
-		return true
+		return nil
 
 	case "Failed":
-		log.Printf(
+		msg := fmt.Sprintf(
 			"Pod is in a %s state: %s/%s",
-			pod.Phase, pod.PodNamespace, pod.PodName,
+			p.Phase, p.PodNamespace, p.PodName,
 		)
-		return false
+		return errors.New(msg)
 
 	case "Succeeded":
 		log.Printf(
 			"Pod is in a %s state: %s/%s",
-			pod.Phase, pod.PodNamespace, pod.PodName,
+			p.Phase, p.PodNamespace, p.PodName,
 		)
-		return true
+		return nil
 
 	case "Unknown":
-		log.Printf(
+		msg := fmt.Sprintf(
 			"Pod is in a %s state: %s/%s",
-			pod.Phase, pod.PodNamespace, pod.PodName,
+			p.Phase, p.PodNamespace, p.PodName,
 		)
-		return false
+		return errors.New(msg)
 	}
-	log.Printf(
+
+	msg := fmt.Sprintf(
 		"Pod is in a %s state ????????: %s/%s",
-		pod.Phase, pod.PodNamespace, pod.PodName,
+		p.Phase, p.PodNamespace, p.PodName,
 	)
-	return false
+	return errors.New(msg)
 }
 
 // verify if element in slice
@@ -296,6 +356,31 @@ func contains(elems []string, v string) bool {
 		}
 	}
 	return false
+}
+
+// returns nil if Pod has owner
+func (p *PodDetails) VerifyPodHasOwner() error {
+	if len(p.OwnerReferences) > 0 {
+		return nil
+	}
+	msg := fmt.Sprintf(
+		"Pod does not have owner/controller: %s/%s",
+		p.PodNamespace, p.PodName,
+	)
+	return errors.New(msg)
+}
+
+// returns nil if Pod is not scheduled to be deleted
+func (p *PodDetails) VerifyPodScheduledToBeDeleted() error {
+	// verify Pod has not been scheduled to be deleted
+	if p.DeletionTimestamp != nil {
+		msg := fmt.Sprintf(
+			"Pod has already been scheduled to be deleted: %s/%s\n%v",
+			p.PodNamespace, p.PodName, p.DeletionTimestamp,
+		)
+		return errors.New(msg)
+	}
+	return nil
 }
 
 // returns a unique list of Pods that have Events that match Reason
@@ -313,31 +398,6 @@ func GetUniqueListOfPods(events []PodEvent) map[string]string {
 		uniqueUIDsList = append(uniqueUIDsList, string(event.UID))
 	}
 	return uniquePodList
-}
-
-// returns True if Pod has owner
-func VerifyPodHasOwner(pod PodDetails) bool {
-	if len(pod.OwnerReferences) > 0 {
-		return true
-	}
-	log.Printf(
-		"Pod does not have owner/controller: %s/%s",
-		pod.PodNamespace, pod.PodName,
-	)
-	return false
-}
-
-// returns True if Pod is scheduled to be deleted
-func VerifyPodWasDeleted(pod PodDetails) bool {
-	// verify Pod has not been scheduled to be deleted
-	if pod.DeletionTimestamp != nil {
-		log.Printf(
-			"Pod has already been scheduled to be deleted: %s/%s\n%v",
-			pod.PodNamespace, pod.PodName, pod.DeletionTimestamp,
-		)
-		return true
-	}
-	return false
 }
 
 // returns a slice of latest Events not older than eventMaxAge
