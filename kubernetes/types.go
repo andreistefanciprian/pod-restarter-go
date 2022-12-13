@@ -1,7 +1,6 @@
 package kubernetes
 
 import (
-	"context"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
@@ -17,10 +16,9 @@ type Logger interface {
 }
 
 // podRestarter holds K8s parameters
-type PodRestarter struct {
+type KubeClient struct {
 	Logger     Logger
 	Kubeconfig *string
-	Ctx        context.Context
 	Clientset  *kubernetes.Clientset
 }
 

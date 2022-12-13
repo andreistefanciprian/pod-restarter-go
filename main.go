@@ -59,37 +59,26 @@ func main() {
 	for {
 		log.Printf("Running every %d seconds", pollingInterval)
 
-		p := &k8s.PodRestarter{
+		c := &k8s.KubeClient{
 			Logger:     log.Default(),
 			Kubeconfig: kubeconfig,
 		}
 
 		// authenticate to k8s cluster and initialise k8s client
-		clientset, err := p.K8sClient()
+		clientset, err := c.NewClientSet()
 		if err != nil {
 			log.Println(err)
 			os.Exit(1)
 		} else {
-			p.Clientset = clientset
+			c.Clientset = clientset
 		}
-
-		// get a list of Events that match Reason
-		eventList, err := p.GetEvents(ctx, namespace, eventReason, errorMessage)
-		if err != nil {
-			log.Println(err)
-		}
-
-		// Filter out Events that are older than polling interval
-		eventMaxAge := time.Now().Add(-time.Duration(pollingInterval) * time.Second)
-		if counter > 0 {
-			eventList = k8s.RemoveOlderEvents(eventList, eventMaxAge)
-		}
-
-		log.Printf("There is a total of %d Events with Reason: %s", len(eventList), eventReason) // DEBUG
 
 		// generate a unique list of Pods that match Event Reason
 		// we do this because a Pod might have multiple Events with the same Reason
-		uniquePodList := k8s.GetUniqueListOfPods(eventList)
+		uniquePodList, err := c.GenerateToBeDeletedPodList(ctx, namespace, eventReason, errorMessage, counter, pollingInterval)
+		if err != nil {
+			log.Println(err)
+		}
 
 		log.Printf("There is a total of %d Pods with Reason: %s", len(uniquePodList), eventReason) // DEBUG
 
@@ -99,29 +88,22 @@ func main() {
 		// iterate through the list of Pods that match Event Reason
 		for pod, ns := range uniquePodList {
 
-			// verify if Pod exists and is still in a Pending state
-			var podInfo *k8s.PodDetails
-			podInfo, err = p.GetPodDetails(ctx, pod, ns)
+			err = c.PodChecks(ctx, pod, ns)
 			if err != nil {
 				log.Println(err)
 				continue
 			}
 
-			if k8s.VerifyPodHasOwner(*podInfo) {
-				if !k8s.VerifyPodWasDeleted(*podInfo) {
-					if !k8s.VerifyPodStatus(*podInfo) {
-						if dryRunMode {
-							log.Printf("[DRY-RUN]: Would have deleted Pod: %s/%s", ns, pod)
-							continue
-						}
-						// delete Pod
-						err := p.DeletePod(ctx, pod, ns)
-						if err != nil {
-							log.Println(err)
-						}
-					}
-				}
+			if dryRunMode {
+				log.Printf("[DRY-RUN]: Would have deleted Pod: %s/%s", ns, pod)
+				continue
 			}
+			// delete Pod
+			err := c.DeletePod(ctx, pod, ns)
+			if err != nil {
+				log.Println(err)
+			}
+
 		}
 		time.Sleep(time.Duration(pollingInterval-int(healTime)) * time.Second) // sleep for n seconds
 		counter += 1
