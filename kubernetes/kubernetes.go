@@ -31,7 +31,6 @@ func NewK8sClient(kubeconfig string) (*KubeClient, error) {
 		log.Println("Running from INSIDE the cluster")
 	}
 
-	fmt.Println(config.CurrentContext)
 	// create the clientset for in-cluster/out-cluster config
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
