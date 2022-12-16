@@ -9,7 +9,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// podRestarter holds K8s parameters
+// kubeClient holds K8s parameters
 type kubeClient struct {
 	clientSet *kubernetes.Clientset
 }
