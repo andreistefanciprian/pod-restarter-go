@@ -9,17 +9,9 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-type Logger interface {
-	Print(v ...any)
-	Println(v ...any)
-	Printf(format string, v ...any)
-}
-
 // podRestarter holds K8s parameters
-type KubeClient struct {
-	Logger     Logger
-	Kubeconfig *string
-	Clientset  *kubernetes.Clientset
+type kubeClient struct {
+	clientSet *kubernetes.Clientset
 }
 
 // PodDetails holds data associated with a Pod
