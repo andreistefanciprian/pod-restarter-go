@@ -59,18 +59,11 @@ func main() {
 	for {
 		log.Printf("Running every %d seconds", pollingInterval)
 
-		c := &k8s.KubeClient{
-			Logger:     log.Default(),
-			Kubeconfig: kubeconfig,
-		}
-
 		// authenticate to k8s cluster and initialise k8s client
-		clientset, err := c.NewClientSet()
+		c, err := k8s.NewK8sClient(*kubeconfig)
 		if err != nil {
 			log.Println(err)
 			os.Exit(1)
-		} else {
-			c.Clientset = clientset
 		}
 
 		// generate a unique list of Pods that match Event Reason

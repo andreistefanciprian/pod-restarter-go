@@ -17,27 +17,30 @@ import (
 )
 
 // discover if kubeconfig creds are inside a Pod or outside the cluster and return a clientSet
-func (c *KubeClient) NewClientSet() (*kubernetes.Clientset, error) {
+func NewK8sClient(kubeconfig string) (*KubeClient, error) {
 	// read and parse kubeconfig
 	config, err := rest.InClusterConfig() // creates the in-cluster config
 	if err != nil {
-		config, err = clientcmd.BuildConfigFromFlags("", *c.Kubeconfig) // creates the out-cluster config
+		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig) // creates the out-cluster config
 		if err != nil {
 			msg := fmt.Sprintf("The kubeconfig cannot be loaded: %v\n", err)
 			return nil, errors.New(msg)
 		}
-		c.Logger.Println("Running from OUTSIDE the cluster")
+		log.Println("Running from OUTSIDE the cluster")
 	} else {
-		c.Logger.Println("Running from INSIDE the cluster")
+		log.Println("Running from INSIDE the cluster")
 	}
 
+	fmt.Println(config.CurrentContext)
 	// create the clientset for in-cluster/out-cluster config
-	c.Clientset, err = kubernetes.NewForConfig(config)
+	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		msg := fmt.Sprintf("The clientset cannot be created: %v\n", err)
 		return nil, errors.New(msg)
 	}
-	return c.Clientset, nil
+	return &KubeClient{
+		Clientset: clientset,
+	}, nil
 }
 
 // returns a list with all the Pods in the Cluster
@@ -73,7 +76,7 @@ func (c *KubeClient) ListPods(ctx context.Context, namespace string) (*[]PodDeta
 		}
 		podsData = append(podsData, podData)
 	}
-	c.Logger.Printf("There is a TOTAL of %d Pods in the cluster\n", len(podsData))
+	log.Printf("There is a TOTAL of %d Pods in the cluster\n", len(podsData))
 	return &podsData, nil
 }
 
@@ -212,7 +215,7 @@ func (c *KubeClient) DeletePod(ctx context.Context, pod, namespace string) error
 	if err != nil {
 		return err
 	}
-	c.Logger.Printf("DELETED Pod %s/%s", namespace, pod)
+	log.Printf("DELETED Pod %s/%s", namespace, pod)
 	return nil
 }
 
