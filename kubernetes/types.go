@@ -10,8 +10,8 @@ import (
 )
 
 // podRestarter holds K8s parameters
-type KubeClient struct {
-	Clientset *kubernetes.Clientset
+type kubeClient struct {
+	clientSet *kubernetes.Clientset
 }
 
 // PodDetails holds data associated with a Pod

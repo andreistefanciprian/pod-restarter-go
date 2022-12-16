@@ -16,8 +16,14 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// discover if kubeconfig creds are inside a Pod or outside the cluster and return a clientSet
-func NewK8sClient(kubeconfig string) (*KubeClient, error) {
+type K8sClient interface {
+	DeletePod(ctx context.Context, pod, namespace string) error
+	GenerateToBeDeletedPodList(ctx context.Context, namespace, eventReason, errorMessage string, counter, pollingInterval int) (map[string]string, error)
+	PodChecks(ctx context.Context, podName, podNamespace string) error
+}
+
+// NewK8sClient discover if kubeconfig creds are inside a Pod or outside the cluster and return a clientSet
+func NewK8sClient(kubeconfig string) (*kubeClient, error) {
 	// read and parse kubeconfig
 	config, err := rest.InClusterConfig() // creates the in-cluster config
 	if err != nil {
@@ -37,14 +43,14 @@ func NewK8sClient(kubeconfig string) (*KubeClient, error) {
 		msg := fmt.Sprintf("The clientset cannot be created: %v\n", err)
 		return nil, errors.New(msg)
 	}
-	return &KubeClient{
-		Clientset: clientset,
+	return &kubeClient{
+		clientSet: clientset,
 	}, nil
 }
 
-// returns a list with all the Pods in the Cluster
-func (c *KubeClient) ListPods(ctx context.Context, namespace string) (*[]PodDetails, error) {
-	api := c.Clientset.CoreV1()
+// listPods returns a list with all the Pods in the Cluster
+func (c *kubeClient) listPods(ctx context.Context, namespace string) (*[]PodDetails, error) {
+	api := c.clientSet.CoreV1()
 	var podData PodDetails
 	var podsData []PodDetails
 
@@ -80,10 +86,8 @@ func (c *KubeClient) ListPods(ctx context.Context, namespace string) (*[]PodDeta
 }
 
 // GetEvents returns a list of namespaced Events that match Reason
-func (c *KubeClient) GetEvents(ctx context.Context, namespace, eventReason, errorMessage string) ([]PodEvent, error) {
-	// defer timeTrack(time.Now(), "GetEvents") // calculates the time it takes to execute this method
-
-	api := c.Clientset.CoreV1()
+func (c *kubeClient) GetEvents(ctx context.Context, namespace, eventReason, errorMessage string) ([]PodEvent, error) {
+	api := c.clientSet.CoreV1()
 	var podEvents []PodEvent
 
 	eventList, err := api.Events(namespace).List(
@@ -120,10 +124,10 @@ func (c *KubeClient) GetEvents(ctx context.Context, namespace, eventReason, erro
 	return podEvents, nil
 }
 
-// returns Pod Events
-func (c *KubeClient) GetPodEvents(ctx context.Context, pod, namespace string) ([]PodEvent, error) {
+// getPodEvents returns Pod Events
+func (c *kubeClient) getPodEvents(ctx context.Context, pod, namespace string) ([]PodEvent, error) {
 
-	api := c.Clientset.CoreV1()
+	api := c.clientSet.CoreV1()
 
 	var podEvents []PodEvent
 	// get Pod events
@@ -164,11 +168,10 @@ func (c *KubeClient) GetPodEvents(ctx context.Context, pod, namespace string) ([
 	return podEvents, nil
 }
 
-// returns Pod details
-func (c *KubeClient) GetPodDetails(ctx context.Context, pod, namespace string) (*PodDetails, error) {
-	// defer timeTrack(time.Now(), "GetPodDetails") // calculates the time it takes to execute this method
+// getPodDetails returns Pod details
+func (c *kubeClient) getPodDetails(ctx context.Context, pod, namespace string) (*PodDetails, error) {
 
-	api := c.Clientset.CoreV1()
+	api := c.clientSet.CoreV1()
 	var item *v1.Pod
 	var podData PodDetails
 	var err error
@@ -202,9 +205,9 @@ func (c *KubeClient) GetPodDetails(ctx context.Context, pod, namespace string) (
 	return &podData, nil
 }
 
-// deletes a Pod
-func (c *KubeClient) DeletePod(ctx context.Context, pod, namespace string) error {
-	api := c.Clientset.CoreV1()
+// DeletePod deletes a Pod
+func (c *kubeClient) DeletePod(ctx context.Context, pod, namespace string) error {
+	api := c.clientSet.CoreV1()
 
 	err := api.Pods(namespace).Delete(
 		ctx,
@@ -218,8 +221,8 @@ func (c *KubeClient) DeletePod(ctx context.Context, pod, namespace string) error
 	return nil
 }
 
-// generates a map of Pods that match Event Reason and Error Message
-func (c *KubeClient) GenerateToBeDeletedPodList(ctx context.Context, namespace, eventReason, errorMessage string, counter, pollingInterval int) (map[string]string, error) {
+// GenerateToBeDeletedPodList generates a map of Pods that match Event Reason and Error Message
+func (c *kubeClient) GenerateToBeDeletedPodList(ctx context.Context, namespace, eventReason, errorMessage string, counter, pollingInterval int) (map[string]string, error) {
 
 	var uniquePodList = make(map[string]string)
 
@@ -232,46 +235,46 @@ func (c *KubeClient) GenerateToBeDeletedPodList(ctx context.Context, namespace, 
 	// Filter out Events that are older than polling interval
 	eventMaxAge := time.Now().Add(-time.Duration(pollingInterval) * time.Second)
 	if counter > 0 {
-		eventList = RemoveOlderEvents(eventList, eventMaxAge)
+		eventList = removeOlderEvents(eventList, eventMaxAge)
 	}
 
 	log.Printf("There is a total of %d Events with Reason: %s", len(eventList), eventReason) // DEBUG
 
 	// generate a unique list of Pods that match Event Reason
 	// we do this because a Pod might have multiple Events with the same Reason
-	uniquePodList = GetUniqueListOfPods(eventList)
+	uniquePodList = getUniqueListOfPods(eventList)
 
 	log.Printf("There is a total of %d Pods with Reason: %s", len(uniquePodList), eventReason) // DEBUG
 
 	return uniquePodList, nil
 }
 
-// returns nil if Pod
+// PodChecks returns nil if Pod
 // 1. exists
 // 2. has Owner
 // 3. has not been scheduled to be deleted
 // 4. and is not in a Healthy state (eg: Pending, Failed or Running with unhealthy containers)
-func (c *KubeClient) PodChecks(ctx context.Context, podName, podNamespace string) error {
+func (c *kubeClient) PodChecks(ctx context.Context, podName, podNamespace string) error {
 	// verify if Pod exists
-	podInfo, err := c.GetPodDetails(ctx, podName, podNamespace)
+	podInfo, err := c.getPodDetails(ctx, podName, podNamespace)
 	if err != nil {
 		return err
 	}
 
 	// verify Pod has owner
-	err = podInfo.VerifyPodHasOwner()
+	err = podInfo.verifyPodHasOwner()
 	if err != nil {
 		return err
 	}
 
 	// verify Pod is scheduled to be deleted
-	err = podInfo.VerifyPodScheduledToBeDeleted()
+	err = podInfo.verifyPodScheduledToBeDeleted()
 	if err != nil {
 		return err
 	}
 
 	// verify Pod is in an Unhealthy state
-	err = podInfo.VerifyPodStatus()
+	err = podInfo.verifyPodStatus()
 	if err != nil {
 		return nil
 	} else {
@@ -280,9 +283,8 @@ func (c *KubeClient) PodChecks(ctx context.Context, podName, podNamespace string
 	}
 }
 
-// returns error if Pod is in a Pending, Failed or Running (with unhealthy containers) state
-func (p *PodDetails) VerifyPodStatus() error {
-	// defer timeTrack(time.Now(), "VerifyPodStatus") // calculates the time it takes to execute this method
+// verifyPodStatus returns error if Pod is in a Pending, Failed or Running (with unhealthy containers) state
+func (p *PodDetails) verifyPodStatus() error {
 
 	switch p.Phase {
 
@@ -363,8 +365,8 @@ func contains(elems []string, v string) bool {
 	return false
 }
 
-// returns nil if Pod has owner
-func (p *PodDetails) VerifyPodHasOwner() error {
+// verifyPodHasOwner returns nil if Pod has owner
+func (p *PodDetails) verifyPodHasOwner() error {
 	if len(p.OwnerReferences) > 0 {
 		return nil
 	}
@@ -375,8 +377,8 @@ func (p *PodDetails) VerifyPodHasOwner() error {
 	return errors.New(msg)
 }
 
-// returns nil if Pod is not scheduled to be deleted
-func (p *PodDetails) VerifyPodScheduledToBeDeleted() error {
+// verifyPodScheduledToBeDeleted returns nil if Pod is not scheduled to be deleted
+func (p *PodDetails) verifyPodScheduledToBeDeleted() error {
 	// verify Pod has not been scheduled to be deleted
 	if p.DeletionTimestamp != nil {
 		msg := fmt.Sprintf(
@@ -388,9 +390,8 @@ func (p *PodDetails) VerifyPodScheduledToBeDeleted() error {
 	return nil
 }
 
-// returns a unique list of Pods that have Events that match Reason
-func GetUniqueListOfPods(events []PodEvent) map[string]string {
-	// defer timeTrack(time.Now(), "GetUniqueListOfPods") // calculates the time it takes to execute this method
+// getUniqueListOfPods returns a unique list of Pods that have Events that match Reason
+func getUniqueListOfPods(events []PodEvent) map[string]string {
 
 	var uniquePodList = make(map[string]string)
 	var uniqueUIDsList []string
@@ -405,8 +406,8 @@ func GetUniqueListOfPods(events []PodEvent) map[string]string {
 	return uniquePodList
 }
 
-// returns a slice of latest Events not older than eventMaxAge
-func RemoveOlderEvents(events []PodEvent, eventMaxAge time.Time) []PodEvent {
+// removeOlderEvents returns a slice of latest Events not older than eventMaxAge
+func removeOlderEvents(events []PodEvent, eventMaxAge time.Time) []PodEvent {
 	var latestEvents []PodEvent
 	for _, event := range events {
 
