@@ -43,9 +43,21 @@ func NewK8sClient(kubeconfig string) (*kubeClient, error) {
 		msg := fmt.Sprintf("The clientset cannot be created: %v\n", err)
 		return nil, errors.New(msg)
 	}
+	fmt.Printf("K8s Context: %+v", clientset)
+
 	return &kubeClient{
 		clientSet: clientset,
 	}, nil
+}
+
+func GetCurrentContext(kubeconfig *string) string {
+	config, _ := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		&clientcmd.ClientConfigLoadingRules{ExplicitPath: *kubeconfig},
+		&clientcmd.ConfigOverrides{
+			CurrentContext: "",
+		}).RawConfig()
+	currentContext := config.CurrentContext
+	return currentContext
 }
 
 // listPods returns a list with all the Pods in the Cluster
