@@ -43,21 +43,10 @@ func NewK8sClient(kubeconfig string) (*kubeClient, error) {
 		msg := fmt.Sprintf("The clientset cannot be created: %v\n", err)
 		return nil, errors.New(msg)
 	}
-	log.Printf("K8s Context: %+v", clientset)
 
 	return &kubeClient{
 		clientSet: clientset,
 	}, nil
-}
-
-func GetCurrentContext(kubeconfig *string) string {
-	config, _ := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		&clientcmd.ClientConfigLoadingRules{ExplicitPath: *kubeconfig},
-		&clientcmd.ConfigOverrides{
-			CurrentContext: "",
-		}).RawConfig()
-	currentContext := config.CurrentContext
-	return currentContext
 }
 
 // listPods returns a list with all the Pods in the Cluster
@@ -180,8 +169,8 @@ func (c *kubeClient) getPodEvents(ctx context.Context, pod, namespace string) ([
 	return podEvents, nil
 }
 
-// getPodDetails returns Pod details
-func (c *kubeClient) getPodDetails(ctx context.Context, pod, namespace string) (*PodDetails, error) {
+// GetPodDetails returns Pod details
+func (c *kubeClient) GetPodDetails(ctx context.Context, pod, namespace string) (*PodDetails, error) {
 
 	api := c.clientSet.CoreV1()
 	var item *v1.Pod
@@ -213,6 +202,7 @@ func (c *kubeClient) getPodDetails(ctx context.Context, pod, namespace string) (
 		ContainerStatuses: item.Status.ContainerStatuses,
 		OwnerReferences:   item.ObjectMeta.OwnerReferences,
 		CreationTimestamp: item.ObjectMeta.CreationTimestamp.Time,
+		DeletionTimestamp: item.ObjectMeta.DeletionTimestamp,
 	}
 	return &podData, nil
 }
@@ -268,7 +258,7 @@ func (c *kubeClient) GenerateToBeDeletedPodList(ctx context.Context, namespace, 
 // 4. and is not in a Healthy state (eg: Pending, Failed or Running with unhealthy containers)
 func (c *kubeClient) PodChecks(ctx context.Context, podName, podNamespace string) error {
 	// verify if Pod exists
-	podInfo, err := c.getPodDetails(ctx, podName, podNamespace)
+	podInfo, err := c.GetPodDetails(ctx, podName, podNamespace)
 	if err != nil {
 		return err
 	}
