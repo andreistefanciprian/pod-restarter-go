@@ -11,7 +11,7 @@ import (
 
 // kubeClient holds K8s parameters
 type kubeClient struct {
-	clientSet *kubernetes.Clientset
+	clientSet kubernetes.Interface
 }
 
 // PodDetails holds data associated with a Pod

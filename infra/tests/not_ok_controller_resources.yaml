@@ -16,7 +16,7 @@ spec:
       containers:
       - name: busybox
         image: busybox:wrong
-        command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 10']
+        command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 240']
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -36,7 +36,7 @@ spec:
       containers:
       - name: busybox
         image: busybox:wrong
-        command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 10']
+        command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 240']
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -56,7 +56,7 @@ spec:
       containers:
       - name: busybox
         image: busybox:wrong
-        command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 10']
+        command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 240']
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -76,7 +76,7 @@ spec:
       containers:
       - name: busybox
         image: busybox:wrong
-        command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 10']
+        command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 240']
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -96,7 +96,7 @@ spec:
       containers:
       - name: busybox
         image: busybox:wrong
-        command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 10']
+        command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 240']
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -116,5 +116,54 @@ spec:
       containers:
       - name: busybox
         image: busybox:wrong
-        command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 10']
+        command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 240']
+---
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: busybox4-ds
+  labels:
+    app: busybox
+spec:
+  selector:
+    matchLabels:
+      app: busybox
+  template:
+    metadata:
+      labels:
+        app: busybox
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: ok
+        image: busybox
+        command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 3600']
+      - name: notok
+        image: busybox
+        command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 60']
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: busybox4-dep
+  labels:
+    app: busybox
+spec:
+  selector:
+    matchLabels:
+      app: busybox
+  template:
+    metadata:
+      labels:
+        app: busybox
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: ok
+        image: busybox
+        command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 3600']
+      - name: notok
+        image: busybox
+        command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 60']
 ---

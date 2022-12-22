@@ -7,7 +7,7 @@ metadata:
 subjects:
 - kind: ServiceAccount
   name: {{ include "pod_restarter.fullname" . }}
-  namespace: default
+  namespace: {{ include "pod_restarter.fullname" . }}
 roleRef:
   kind: ClusterRole
   name: {{ include "pod_restarter.fullname" . }}
