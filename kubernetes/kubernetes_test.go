@@ -2,7 +2,6 @@ package kubernetes
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -19,25 +18,27 @@ func TestDeletePod(t *testing.T) {
 		targetPod       string
 		expectSuccess   bool
 	}{
+		// delete a Pod that exists
 		{
-			name: "existing_pod",
+			name: "pod_exists",
 			pods: []runtime.Object{
 				&corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "pod1",
-						Namespace: "namespace1",
+						Name:      "pod_exists",
+						Namespace: "default",
 					},
 				},
 			},
-			targetNamespace: "namespace1",
-			targetPod:       "pod1",
+			targetNamespace: "default",
+			targetPod:       "pod_exists",
 			expectSuccess:   true,
 		},
+		// delete a Pod that does not exist
 		{
-			name:            "not_existing_pod",
+			name:            "pod_does_not_exist",
 			pods:            []runtime.Object{},
-			targetNamespace: "namespace1",
-			targetPod:       "pod1",
+			targetNamespace: "default",
+			targetPod:       "pod_does_not_exist",
 			expectSuccess:   false,
 		},
 	}
@@ -52,8 +53,11 @@ func TestDeletePod(t *testing.T) {
 				test.targetPod,
 				test.targetNamespace,
 			)
-			if err != nil && !test.expectSuccess {
-				fmt.Print(err.Error())
+
+			if err != nil && test.expectSuccess {
+				t.Fatalf("Unexpected error deleting existing Pod: %s", err.Error())
+			} else if err == nil && !test.expectSuccess {
+				t.Fatalf("We we're expecting an error for deleting a Pod that does not exist: %s", err.Error())
 			}
 		})
 	}
