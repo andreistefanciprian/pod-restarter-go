@@ -5,7 +5,8 @@ metadata:
   labels:
     app: busybox
 spec:
+  restartPolicy: Never
   containers:
     - name: busybox
       image: busybox:latest
-      command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 1000']
+      command: ['sh', '-c', 'echo "Hello, Kubernetes!" && sleep 60']
