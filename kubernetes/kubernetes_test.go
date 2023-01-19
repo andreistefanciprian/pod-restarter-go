@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -58,6 +59,91 @@ func TestDeletePod(t *testing.T) {
 				t.Fatalf("Unexpected error deleting existing Pod: %s", err.Error())
 			} else if err == nil && !test.expectSuccess {
 				t.Fatalf("We we're expecting an error for deleting a Pod that does not exist: %s", err.Error())
+			}
+		})
+	}
+}
+
+func TestGetEvents(t *testing.T) {
+	testCases := []struct {
+		name          string
+		events        []runtime.Object
+		namespace     string
+		eventReason   string
+		errorMessage  string
+		expectSuccess bool
+	}{
+		{
+			name: "events_with_error",
+			events: []runtime.Object{
+				&corev1.EventList{
+					Items: []corev1.Event{
+						corev1.Event{
+							ObjectMeta: metav1.ObjectMeta{},
+							InvolvedObject: corev1.ObjectReference{
+								Kind:            "Pod",
+								Namespace:       "test",
+								Name:            "nginx-7c979dff44-2d4bh",
+								UID:             "62f2e232-542f-40b6-9495-97ab3e443c1d",
+								APIVersion:      "v1",
+								ResourceVersion: "3757",
+							},
+							Reason:         "Scheduled",
+							Message:        "Successfully assigned test/nginx-7c979dff44-2d4bh to docker-desktop",
+							FirstTimestamp: metav1.Now(),
+							LastTimestamp:  metav1.Now(),
+							Type:           corev1.EventTypeNormal,
+						},
+						corev1.Event{
+							ObjectMeta: metav1.ObjectMeta{},
+							InvolvedObject: corev1.ObjectReference{
+								Kind:            "Pod",
+								Namespace:       "test",
+								Name:            "nginx-7c979dff44-2d4bh",
+								UID:             "62f2e232-542f-40b6-9495-97ab3e443c1d",
+								APIVersion:      "v1",
+								ResourceVersion: "3768",
+							},
+							Reason:         "FailedCreatePodSandBox",
+							Message:        "container veth name provided (eth0) already exists",
+							FirstTimestamp: metav1.Now(),
+							LastTimestamp:  metav1.Now(),
+							Type:           corev1.EventTypeWarning,
+						},
+					},
+				},
+			},
+			namespace:     "default",
+			eventReason:   "FailedCreatePodSandBox",
+			errorMessage:  "container veth name provided (eth0) already exists",
+			expectSuccess: true,
+		},
+		// no events
+		{
+			name:          "no_events",
+			events:        []runtime.Object{},
+			namespace:     "test",
+			eventReason:   "FailedCreatePodSandBox",
+			errorMessage:  "container veth name provided (eth0) already exists",
+			expectSuccess: true,
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			var clt kubeClient
+			var ctx = context.TODO()
+			// var podEvents []PodEvent
+			clt.clientSet = fake.NewSimpleClientset(test.events...)
+			podEvents, err := clt.GetEvents(
+				ctx,
+				test.namespace,
+				test.eventReason,
+				test.errorMessage,
+			)
+			fmt.Printf("Pod Events: %+v", podEvents)
+			if err != nil && test.expectSuccess {
+				t.Fatalf("Unexpected error getting existing Errored Events: %s", err.Error())
 			}
 		})
 	}
