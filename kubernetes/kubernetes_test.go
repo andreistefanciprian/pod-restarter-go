@@ -141,9 +141,9 @@ func TestGetEvents(t *testing.T) {
 				test.eventReason,
 				test.errorMessage,
 			)
-			fmt.Printf("Pod Events: %+v", podEvents)
+			fmt.Printf("Pod Events: %+v", podEvents) // DEBUG
 			if err != nil && test.expectSuccess {
-				t.Fatalf("Unexpected error getting existing Errored Events: %s", err.Error())
+				t.Fatalf("Unexpected error getting Events: %s", err.Error())
 			}
 		})
 	}
