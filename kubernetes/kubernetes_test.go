@@ -2,7 +2,6 @@ package kubernetes
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -66,27 +65,29 @@ func TestDeletePod(t *testing.T) {
 
 func TestGetEvents(t *testing.T) {
 	testCases := []struct {
-		name          string
-		events        []runtime.Object
-		namespace     string
-		eventReason   string
-		errorMessage  string
-		expectSuccess bool
+		name                  string
+		events                []runtime.Object
+		namespace             string
+		eventReason           string
+		errorMessage          string
+		expectedPodsWithError int
 	}{
+		// This test is looking for Events that match Reason and Message in a namespace
+		// 1 Event will match Reason and Message
 		{
-			name: "events_with_error",
+			name: "Events that match Reason and Message in a namespace",
 			events: []runtime.Object{
 				&corev1.Event{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: "default",
-						Name:      "nginx-7c979dff44-2d4bh.1",
+						Name:      "foo.1",
 					},
 					Reason:  "Scheduled",
-					Message: "Successfully assigned test/nginx-7c979dff44-2d4bh to docker-desktop",
+					Message: "Successfully assigned default/foo to kublet.node1",
 					InvolvedObject: corev1.ObjectReference{
 						Kind:            "Pod",
 						Namespace:       "default",
-						Name:            "nginx-7c979dff44-2d4bh",
+						Name:            "foo",
 						UID:             "62f2e232-542f-40b6-9495-97ab3e443c1d",
 						APIVersion:      "v1",
 						ResourceVersion: "3757",
@@ -104,14 +105,14 @@ func TestGetEvents(t *testing.T) {
 				&corev1.Event{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: "default",
-						Name:      "nginx-7c979dff44-2d4bh.2",
+						Name:      "foo.2",
 					},
 					Reason:  "FailedCreatePodSandBox",
 					Message: "container veth name provided (eth0) already exists ....",
 					InvolvedObject: corev1.ObjectReference{
 						Kind:            "Pod",
 						Namespace:       "default",
-						Name:            "nginx-7c979dff44-2d4bh.2",
+						Name:            "foo.2",
 						UID:             "62f2e232-542f-40b6-9495-97ab3e443c1d",
 						APIVersion:      "v1",
 						ResourceVersion: "3768",
@@ -126,20 +127,142 @@ func TestGetEvents(t *testing.T) {
 					LastTimestamp:  metav1.Now(),
 					Type:           corev1.EventTypeWarning,
 				},
+				&corev1.Event{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "bar.1",
+					},
+					Reason:  "FailedCreatePodSandBox",
+					Message: "container veth name provided (eth0) already exists ....",
+					InvolvedObject: corev1.ObjectReference{
+						Kind:            "Pod",
+						Namespace:       "test",
+						Name:            "bar.1",
+						UID:             "62f2e232-542f-40b6-9495-2",
+						APIVersion:      "v1",
+						ResourceVersion: "3777",
+						FieldPath:       "spec.containers{mycontainer}",
+					},
+					Source: corev1.EventSource{
+						Component: "kubelet",
+						Host:      "kublet.node1",
+					},
+					Count:          1,
+					FirstTimestamp: metav1.Now(),
+					LastTimestamp:  metav1.Now(),
+					Type:           corev1.EventTypeWarning,
+				},
 			},
-			namespace:     "default",
-			eventReason:   "FailedCreatePodSandBox",
-			errorMessage:  "container veth name provided (eth0) already exists",
-			expectSuccess: true,
+			namespace:             "default",
+			eventReason:           "FailedCreatePodSandBox",
+			errorMessage:          "container veth name provided (eth0) already exists",
+			expectedPodsWithError: 1,
 		},
-		// no events
+		// This test is looking for Events that match Reason and Message across all namespaces
+		// 2 Events will match Reason and Message
 		{
-			name:          "no_events",
-			events:        []runtime.Object{},
-			namespace:     "default",
-			eventReason:   "FailedCreatePodSandBox",
-			errorMessage:  "container veth name provided (eth0) already exists",
-			expectSuccess: true,
+			name: "Events that match Reason and Message in a namespace",
+			events: []runtime.Object{
+				&corev1.Event{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "default",
+						Name:      "foo.1",
+					},
+					Reason:  "Scheduled",
+					Message: "Successfully assigned default/foo to kublet.node1",
+					InvolvedObject: corev1.ObjectReference{
+						Kind:            "Pod",
+						Namespace:       "default",
+						Name:            "foo",
+						UID:             "62f2e232-542f-40b6-9495-97ab3e443c1d",
+						APIVersion:      "v1",
+						ResourceVersion: "3757",
+						FieldPath:       "spec.containers{mycontainer}",
+					},
+					Source: corev1.EventSource{
+						Component: "kubelet",
+						Host:      "kublet.node1",
+					},
+					Count:          1,
+					FirstTimestamp: metav1.Now(),
+					LastTimestamp:  metav1.Now(),
+					Type:           corev1.EventTypeNormal,
+				},
+				&corev1.Event{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "default",
+						Name:      "foo.2",
+					},
+					Reason:  "FailedCreatePodSandBox",
+					Message: "container veth name provided (eth0) already exists ....",
+					InvolvedObject: corev1.ObjectReference{
+						Kind:            "Pod",
+						Namespace:       "default",
+						Name:            "foo.2",
+						UID:             "62f2e232-542f-40b6-9495-97ab3e443c1d",
+						APIVersion:      "v1",
+						ResourceVersion: "3768",
+						FieldPath:       "spec.containers{mycontainer}",
+					},
+					Source: corev1.EventSource{
+						Component: "kubelet",
+						Host:      "kublet.node1",
+					},
+					Count:          1,
+					FirstTimestamp: metav1.Now(),
+					LastTimestamp:  metav1.Now(),
+					Type:           corev1.EventTypeWarning,
+				},
+				&corev1.Event{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "bar.1",
+					},
+					Reason:  "FailedCreatePodSandBox",
+					Message: "container veth name provided (eth0) already exists ....",
+					InvolvedObject: corev1.ObjectReference{
+						Kind:            "Pod",
+						Namespace:       "test",
+						Name:            "bar.1",
+						UID:             "62f2e232-542f-40b6-9495-2",
+						APIVersion:      "v1",
+						ResourceVersion: "3777",
+						FieldPath:       "spec.containers{mycontainer}",
+					},
+					Source: corev1.EventSource{
+						Component: "kubelet",
+						Host:      "kublet.node1",
+					},
+					Count:          1,
+					FirstTimestamp: metav1.Now(),
+					LastTimestamp:  metav1.Now(),
+					Type:           corev1.EventTypeWarning,
+				},
+			},
+			namespace:             "",
+			eventReason:           "FailedCreatePodSandBox",
+			errorMessage:          "container veth name provided (eth0) already exists",
+			expectedPodsWithError: 2,
+		},
+		// This test is looking for Events that match Reason and Message in a namespace
+		// 0 Events will match Reason and Message
+		{
+			name:                  "No Events in a namespace",
+			events:                []runtime.Object{},
+			namespace:             "default",
+			eventReason:           "FailedCreatePodSandBox",
+			errorMessage:          "container veth name provided (eth0) already exists",
+			expectedPodsWithError: 0,
+		},
+		// This test is looking for Events that match Reason and Message across all namespaces
+		// 0 Events will match Reason and Message across all namespaces
+		{
+			name:                  "No Events across all namespaces",
+			events:                []runtime.Object{},
+			namespace:             "",
+			eventReason:           "FailedCreatePodSandBox",
+			errorMessage:          "container veth name provided (eth0) already exists",
+			expectedPodsWithError: 0,
 		},
 	}
 
@@ -154,9 +277,10 @@ func TestGetEvents(t *testing.T) {
 				test.eventReason,
 				test.errorMessage,
 			)
-			fmt.Printf("Pod Events: %+v", podEvents) // DEBUG
-			if err != nil && test.expectSuccess {
-				t.Fatalf("Unexpected error getting Events: %s", err.Error())
+			if err != nil {
+				t.Fatalf("Unexpected error getting Pod Events: %s", err.Error())
+			} else if test.expectedPodsWithError != len(podEvents) {
+				t.Fatalf("Unexpected Number of Events with Reason and Error Message found. Expected: %d. Found: %d", test.expectedPodsWithError, len(podEvents))
 			}
 		})
 	}
