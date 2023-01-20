@@ -76,41 +76,55 @@ func TestGetEvents(t *testing.T) {
 		{
 			name: "events_with_error",
 			events: []runtime.Object{
-				&corev1.EventList{
-					Items: []corev1.Event{
-						corev1.Event{
-							ObjectMeta: metav1.ObjectMeta{},
-							InvolvedObject: corev1.ObjectReference{
-								Kind:            "Pod",
-								Namespace:       "test",
-								Name:            "nginx-7c979dff44-2d4bh",
-								UID:             "62f2e232-542f-40b6-9495-97ab3e443c1d",
-								APIVersion:      "v1",
-								ResourceVersion: "3757",
-							},
-							Reason:         "Scheduled",
-							Message:        "Successfully assigned test/nginx-7c979dff44-2d4bh to docker-desktop",
-							FirstTimestamp: metav1.Now(),
-							LastTimestamp:  metav1.Now(),
-							Type:           corev1.EventTypeNormal,
-						},
-						corev1.Event{
-							ObjectMeta: metav1.ObjectMeta{},
-							InvolvedObject: corev1.ObjectReference{
-								Kind:            "Pod",
-								Namespace:       "test",
-								Name:            "nginx-7c979dff44-2d4bh",
-								UID:             "62f2e232-542f-40b6-9495-97ab3e443c1d",
-								APIVersion:      "v1",
-								ResourceVersion: "3768",
-							},
-							Reason:         "FailedCreatePodSandBox",
-							Message:        "container veth name provided (eth0) already exists",
-							FirstTimestamp: metav1.Now(),
-							LastTimestamp:  metav1.Now(),
-							Type:           corev1.EventTypeWarning,
-						},
+				&corev1.Event{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "default",
+						Name:      "nginx-7c979dff44-2d4bh.1",
 					},
+					Reason:  "Scheduled",
+					Message: "Successfully assigned test/nginx-7c979dff44-2d4bh to docker-desktop",
+					InvolvedObject: corev1.ObjectReference{
+						Kind:            "Pod",
+						Namespace:       "default",
+						Name:            "nginx-7c979dff44-2d4bh",
+						UID:             "62f2e232-542f-40b6-9495-97ab3e443c1d",
+						APIVersion:      "v1",
+						ResourceVersion: "3757",
+						FieldPath:       "spec.containers{mycontainer}",
+					},
+					Source: corev1.EventSource{
+						Component: "kubelet",
+						Host:      "kublet.node1",
+					},
+					Count:          1,
+					FirstTimestamp: metav1.Now(),
+					LastTimestamp:  metav1.Now(),
+					Type:           corev1.EventTypeNormal,
+				},
+				&corev1.Event{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "default",
+						Name:      "nginx-7c979dff44-2d4bh.2",
+					},
+					Reason:  "FailedCreatePodSandBox",
+					Message: "container veth name provided (eth0) already exists ....",
+					InvolvedObject: corev1.ObjectReference{
+						Kind:            "Pod",
+						Namespace:       "default",
+						Name:            "nginx-7c979dff44-2d4bh.2",
+						UID:             "62f2e232-542f-40b6-9495-97ab3e443c1d",
+						APIVersion:      "v1",
+						ResourceVersion: "3768",
+						FieldPath:       "spec.containers{mycontainer}",
+					},
+					Source: corev1.EventSource{
+						Component: "kubelet",
+						Host:      "kublet.node1",
+					},
+					Count:          1,
+					FirstTimestamp: metav1.Now(),
+					LastTimestamp:  metav1.Now(),
+					Type:           corev1.EventTypeWarning,
 				},
 			},
 			namespace:     "default",
@@ -122,7 +136,7 @@ func TestGetEvents(t *testing.T) {
 		{
 			name:          "no_events",
 			events:        []runtime.Object{},
-			namespace:     "test",
+			namespace:     "default",
 			eventReason:   "FailedCreatePodSandBox",
 			errorMessage:  "container veth name provided (eth0) already exists",
 			expectSuccess: true,
@@ -133,7 +147,6 @@ func TestGetEvents(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			var clt kubeClient
 			var ctx = context.TODO()
-			// var podEvents []PodEvent
 			clt.clientSet = fake.NewSimpleClientset(test.events...)
 			podEvents, err := clt.GetEvents(
 				ctx,
