@@ -5,10 +5,10 @@ Build a tool that restarts Pods in a bad state using client-go kubernetes packag
 Performs the following steps:
 * Looks for latest Pod Events that matches Event Reason (default Reason "FailedCreatePodSandBox") and Event Message (default Message "container veth name provided (eth0) already exists")
 * If there are matching Pods, these Pods will go through a sequence of steps before they get deleted:
-    ** verify Pod exists
-    ** verify Pod has owner/controller
-    ** verify Pod has not been scheduled to be deleted
-    ** verify Pod is in a Failing State (Pending/Failed or Running with failing containers)
+    - verify Pod exists
+    - verify Pod has owner/controller
+    - verify Pod has not been scheduled to be deleted
+    - verify Pod is in a Failing State (Pending/Failed or Running with failing containers)
 * If all above checks pass, Pod will be deleted
 
 These steps are repeated in a loop on a polling interval basis.
