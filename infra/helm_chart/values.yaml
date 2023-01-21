@@ -3,9 +3,10 @@
 # Declare variables to be passed into your templates.
 
 podRestarter:
-  # errorMessage: 'Failed to pull image "wrongimage"'
-  errorMessage: Back-off pulling image
-  # errorMessage: container veth name provided (eth0) already exists
+  eventReason: "BackOff"
+  # eventMessage: 'Failed to pull image "wrongimage"'
+  eventMessage: Back-off pulling image
+  # eventMessage: container veth name provided (eth0) already exists
   pollInterval: 30
   namespace: ""
   # namespace: "default"

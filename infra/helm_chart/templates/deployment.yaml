@@ -22,16 +22,19 @@ spec:
         args:
           - --namespace=$(NAMESPACE)
           - --polling-interval=$(POLLING_INTERVAL)
-          - --error-message=$(ERROR_MESSAGE)
+          - --error-message=$(EVENT_MESSAGE)
+          - --reason=$(EVENT_REASON)
         resources:
           {{- toYaml .Values.resources | nindent 12 }}
         env:
-          - name: ERROR_MESSAGE
-            value: {{ .Values.podRestarter.errorMessage }}
+          - name: EVENT_MESSAGE
+            value: {{ .Values.podRestarter.eventMessage }}
           - name: POLLING_INTERVAL
             value: "{{ .Values.podRestarter.pollInterval }}"
           - name: NAMESPACE
             value: "{{ .Values.podRestarter.namespace }}"
+          - name: EVENT_REASON
+            value: "{{ .Values.podRestarter.eventReason }}"
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
