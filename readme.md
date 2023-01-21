@@ -3,7 +3,7 @@
 Build a tool that restarts Pods in a bad state using client-go kubernetes packages.
 
 Performs the following steps:
-* Looks for latest Pod Events that matches Event Reason (eg: reason "FailedCreatePodSandBox")
+* Looks for latest Pod Events that matches Event Reason (default Reason "FailedCreatePodSandBox") and Event Message (default Message "container veth name provided (eth0) already exists")
 * If there are matching Pods, these Pods will go through a sequence of steps before they get deleted:
 ** verify Pod exists
 ** verify Pod has owner/controller
@@ -23,17 +23,17 @@ go mod tidy
 # runs in dry-run mode
 go run main.go --dry-run
 
-# delete Pods that have Events with Reason "FailedCreatePodSandBox"
+# delete Pods that have Events with default Reason "FailedCreatePodSandBox" and default Message "container veth name provided (eth0) already exists"
 go run main.go
 
-# delete Pods that have Events with Reason "BackOff"
-go run main.go --reason "BackOff"
+# delete Pods that have Events with Reason "BackOff" and Message "Back-off pulling image"
+go run main.go --reason "BackOff" --error-message "Back-off pulling image"
 
-# delete Pods that have Events with Reason "BackOff" in namespace default
-go run main.go --reason="BackOff" --namespace default
+# delete Pods that have Events with Reason "BackOff" and Message "Back-off pulling image" in namespace default
+go run main.go --reason="BackOff" --error-message "Back-off pulling image" --namespace default
 
-# delete Pods that have Events with Reason "FailedCreatePodSandBox" every 30 seconds
-go run main.go --reason="BackOff" --namespace default --polling-interval 30
+# delete Pods that have matching Events with default Reason and Message every 30 seconds
+go run main.go --polling-interval 30
 ```
 
 ### Deploy to k8s with helm
@@ -52,12 +52,19 @@ helm list -A
 task uninstall
 ```
 
-### Test 
+### Run Unit Tests 
 
 ```
-# generate Pending pods
+go test -v ./...
+```
+
+### Simulate Failing Pods and test 
+
+```
+# generate failing pods due to pulling wrong images
 cd infra/tests
 bash generate_pending_pods.sh
+
 
 # check app logs
 kubectl logs -l app=pod-restarter -f
