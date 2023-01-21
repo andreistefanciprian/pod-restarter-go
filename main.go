@@ -1,5 +1,6 @@
 // This script runs in/out a K8s cluster
-// Deletes Pods that are in a Failing state due to a particular Event Reason (eg: FailedCreatePodSandBox)
+// Deletes Pods that are in a Failing state (Pod Phase: Failing/Pending or Running with failing containers).
+// Targeted Pods failing Pods must match Pod Event Reason (eg: FailedCreatePodSandBox) and Event Message (eg: "container veth name provided (eth0) already exists")
 
 package main
 
