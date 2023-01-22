@@ -1,5 +1,7 @@
 ### Description
 
+[![ci](https://github.com/andreistefanciprian/pod-restarter-go/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/andreistefanciprian/pod-restarter-go/actions/workflows/ci.yaml)
+
 Build a tool that restarts Pods in a bad state using client-go kubernetes packages.
 
 Performs the following steps:
