@@ -17,60 +17,57 @@ These steps are repeated in a loop on a polling interval basis.
 
 pod-restarter is configurable through cli parameters.
 
-* `--polling-interval`
-    - Delete Pods that have matching Events with default Reason and Message every poll interval (seconds).
-    - Default value: 30 (seconds)
-    - ```./pod-restarter --polling-interval 10```
+#### `--polling-interval`
+- Delete Pods that have matching Events with default Reason and Message every poll interval (seconds).
+- Default value: 30 (seconds)
+```./pod-restarter --polling-interval 10```
 
 #### `--dry-run`
+- Logs pod-restarter actions but don't actually delete any pods.
+- Default value: disabled
 
-Logs pod-restarter actions but don't actually delete any pods.
-Default value: disabled
-
-```
-go run main.go --dry-run
-```
+```./pod-restarter --dry-run```
 
 #### `--reason` and `--error-message`
-
-These parameters work together because every Event has a Reason and a related Message.
-
-These parameters are used for identifying failing Pods that match Event Reason and Message.
-
-Default values: "FailedCreatePodSandBox" (reason) and "container veth name provided (eth0) already exists" (message)
+- These parameters work together because every Event has a Reason and a related Message.
+- These parameters are used for identifying failing Pods that match Event Reason and Message.
+- Default values:
+    - "FailedCreatePodSandBox" (Event Reason)
+    - "container veth name provided (eth0) already exists" (Event Message)
 
 ```
 # delete Pods that have Events with default Reason "FailedCreatePodSandBox" and default Message "container veth name provided (eth0) already exists"
-go run main.go
+./pod-restarter
 
 # delete Pods that have Events with Reason "BackOff" and Message "Back-off pulling image"
-go run main.go --reason "BackOff" --error-message "Back-off pulling image"
+./pod-restarter --reason "BackOff" --error-message "Back-off pulling image"
 ```
 
 #### `--namespace`
-
-The kubernetes namespavce where pod-restarter should look for Failing Pods.
-Default value: "" (look for all namespaces)
+- The kubernetes namespavce where pod-restarter should look for Failing Pods.
+- Default value: "" (look for all namespaces)
 
 ```
 # delete Pods in namespace default
-go run main.go --namespace default
+./pod-restarter --namespace default
 ```
 
 #### `--kubeconfig`
+- When run locally (outside of cluster), specifies the kubeconfig config.
+- Default value: ~/.kube/config
 
-When run locally (outside of cluster), specifies the kubeconfig config.
-Default value: ~/.kube/config
-
-### Run and test script on local machine/laptop
+### Run and test on local machine/laptop
 
 ```
 # install dependencies
 go mod init
 go mod tidy
 
-# delete Pods that match default Event reason and message
-go run main.go
+# compile source code into executable binary
+go build -o pod-restarter
+
+# run in dry mode
+./pod-restarter --dry-run --polling-interval 10
 
 # run unit tests
 go test -v ./...
