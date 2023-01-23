@@ -1,9 +1,9 @@
-## pod-restarter: restarts Pods in a bad state using client-go kubernetes packages
+## pod-restarter: restarts Pods in a failed state using client-go kubernetes packages
 
-[![test](https://github.com/andreistefanciprian/pod-restarter-go/actions/workflows/test.yaml/badge.svg?branch=main)](https://github.com/andreistefanciprian/pod-restarter-go/actions/workflows/test.yaml)
+[![test](https://github.com/andreistefanciprian/pod-restarter-go/actions/workflows/test.yaml/badge.svg)](https://github.com/andreistefanciprian/pod-restarter-go/actions/workflows/test.yaml)
 
 Performs the following steps:
-* Looks for latest Pod Events that matches Event Reason (default value: "FailedCreatePodSandBox") and Event Message (default value: "container veth name provided (eth0) already exists")
+* Looks for latest Pod Events that matches an Event Reason and Message
 * If there are matching Pods, these Pods will go through a sequence of steps before they get deleted:
     - verify Pod exists
     - verify Pod has owner/controller
