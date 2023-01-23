@@ -1,6 +1,6 @@
 ## pod-restarter: restarts Pods in a bad state using client-go kubernetes packages
 
-[![test](https://github.com/andreistefanciprian/pod-restarter-go/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/andreistefanciprian/pod-restarter-go/actions/workflows/ci.yaml)
+[![test](https://github.com/andreistefanciprian/pod-restarter-go/actions/workflows/test.yaml/badge.svg?branch=main)](https://github.com/andreistefanciprian/pod-restarter-go/actions/workflows/test.yaml)
 
 Performs the following steps:
 * Looks for latest Pod Events that matches Event Reason (default value: "FailedCreatePodSandBox") and Event Message (default value: "container veth name provided (eth0) already exists")
@@ -20,13 +20,18 @@ pod-restarter is configurable through cli parameters.
 #### `--polling-interval`
 - Delete Pods that have matching Events with default Reason and Message every poll interval (seconds).
 - Default value: 30 (seconds)
-```./pod-restarter --polling-interval 10```
+
+```
+./pod-restarter --polling-interval 10
+```
 
 #### `--dry-run`
 - Logs pod-restarter actions but don't actually delete any pods.
 - Default value: disabled
 
-```./pod-restarter --dry-run```
+```
+./pod-restarter --dry-run
+```
 
 #### `--reason` and `--error-message`
 - These parameters work together because every Event has a Reason and a related Message.
