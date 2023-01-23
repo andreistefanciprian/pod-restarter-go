@@ -17,14 +17,10 @@ These steps are repeated in a loop on a polling interval basis.
 
 pod-restarter is configurable through cli parameters.
 
-#### `--polling-interval`
-
-Delete Pods that have matching Events with default Reason and Message every poll interval (seconds).
-Default value: 30 (seconds)
-
-```
-go run main.go --polling-interval 10
-```
+* `--polling-interval`
+    - Delete Pods that have matching Events with default Reason and Message every poll interval (seconds).
+    - Default value: 30 (seconds)
+    - ```./pod-restarter --polling-interval 10```
 
 #### `--dry-run`
 
@@ -38,7 +34,9 @@ go run main.go --dry-run
 #### `--reason` and `--error-message`
 
 These parameters work together because every Event has a Reason and a related Message.
-These parameters are used for identofying failing Pods that match Event Reason and Message.
+
+These parameters are used for identifying failing Pods that match Event Reason and Message.
+
 Default values: "FailedCreatePodSandBox" (reason) and "container veth name provided (eth0) already exists" (message)
 
 ```
