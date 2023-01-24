@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 )
@@ -22,15 +21,10 @@ func TestDeletePod(t *testing.T) {
 		{
 			testName: "Delete existing Pod",
 			mockedPods: []runtime.Object{
-				&corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "pod_exists",
-						Namespace: "default",
-					},
-				},
+				makePod("foo", "default", 1, corev1.PodRunning, "abc1"),
 			},
 			podNamespace:  "default",
-			podName:       "pod_exists",
+			podName:       "foo",
 			expectSuccess: true,
 		},
 		// delete a Pod that does not exist
@@ -38,7 +32,7 @@ func TestDeletePod(t *testing.T) {
 			testName:      "Delete Pod that does not exist",
 			mockedPods:    []runtime.Object{},
 			podNamespace:  "default",
-			podName:       "pod_does_not_exist",
+			podName:       "foo",
 			expectSuccess: false,
 		},
 	}
@@ -77,81 +71,9 @@ func TestGetEvents(t *testing.T) {
 		{
 			testName: "Get Pod Events that match Reason and Message in a namespace",
 			mockedEvents: []runtime.Object{
-				&corev1.Event{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "default",
-						Name:      "foo.1",
-					},
-					Reason:  "Scheduled",
-					Message: "Successfully assigned default/foo to kublet.node1",
-					InvolvedObject: corev1.ObjectReference{
-						Kind:            "Pod",
-						Namespace:       "default",
-						Name:            "foo",
-						UID:             "62f2e232-542f-40b6-9495-97ab3e443c1d",
-						APIVersion:      "v1",
-						ResourceVersion: "3757",
-						FieldPath:       "spec.containers{mycontainer}",
-					},
-					Source: corev1.EventSource{
-						Component: "kubelet",
-						Host:      "kublet.node1",
-					},
-					Count:          1,
-					FirstTimestamp: metav1.Now(),
-					LastTimestamp:  metav1.Now(),
-					Type:           corev1.EventTypeNormal,
-				},
-				&corev1.Event{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "default",
-						Name:      "foo.2",
-					},
-					Reason:  "FailedCreatePodSandBox",
-					Message: "container veth name provided (eth0) already exists ....",
-					InvolvedObject: corev1.ObjectReference{
-						Kind:            "Pod",
-						Namespace:       "default",
-						Name:            "foo.2",
-						UID:             "62f2e232-542f-40b6-9495-97ab3e443c1d",
-						APIVersion:      "v1",
-						ResourceVersion: "3768",
-						FieldPath:       "spec.containers{mycontainer}",
-					},
-					Source: corev1.EventSource{
-						Component: "kubelet",
-						Host:      "kublet.node1",
-					},
-					Count:          1,
-					FirstTimestamp: metav1.Now(),
-					LastTimestamp:  metav1.Now(),
-					Type:           corev1.EventTypeWarning,
-				},
-				&corev1.Event{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "test",
-						Name:      "bar.1",
-					},
-					Reason:  "FailedCreatePodSandBox",
-					Message: "container veth name provided (eth0) already exists ....",
-					InvolvedObject: corev1.ObjectReference{
-						Kind:            "Pod",
-						Namespace:       "test",
-						Name:            "bar.1",
-						UID:             "62f2e232-542f-40b6-9495-2",
-						APIVersion:      "v1",
-						ResourceVersion: "3777",
-						FieldPath:       "spec.containers{mycontainer}",
-					},
-					Source: corev1.EventSource{
-						Component: "kubelet",
-						Host:      "kublet.node1",
-					},
-					Count:          1,
-					FirstTimestamp: metav1.Now(),
-					LastTimestamp:  metav1.Now(),
-					Type:           corev1.EventTypeWarning,
-				},
+				makeEvent("foo", "default", "Scheduled", "Successfully assigned pod to kublet.node1", "Normal", 1, "uid1"),
+				makeEvent("foo", "default", "FailedCreatePodSandBox", "container veth name provided (eth0) already exists ....", "Warning", 2, "uid1"),
+				makeEvent("foo", "test", "FailedCreatePodSandBox", "container veth name provided (eth0) already exists ....", "Warning", 2, "uid2"),
 			},
 			eventNamespace:        "default",
 			eventReason:           "FailedCreatePodSandBox",
@@ -163,81 +85,9 @@ func TestGetEvents(t *testing.T) {
 		{
 			testName: "Get Events that match Reason and Message across all namespaces",
 			mockedEvents: []runtime.Object{
-				&corev1.Event{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "default",
-						Name:      "foo.1",
-					},
-					Reason:  "Scheduled",
-					Message: "Successfully assigned default/foo to kublet.node1",
-					InvolvedObject: corev1.ObjectReference{
-						Kind:            "Pod",
-						Namespace:       "default",
-						Name:            "foo",
-						UID:             "62f2e232-542f-40b6-9495-97ab3e443c1d",
-						APIVersion:      "v1",
-						ResourceVersion: "3757",
-						FieldPath:       "spec.containers{mycontainer}",
-					},
-					Source: corev1.EventSource{
-						Component: "kubelet",
-						Host:      "kublet.node1",
-					},
-					Count:          1,
-					FirstTimestamp: metav1.Now(),
-					LastTimestamp:  metav1.Now(),
-					Type:           corev1.EventTypeNormal,
-				},
-				&corev1.Event{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "default",
-						Name:      "foo.2",
-					},
-					Reason:  "FailedCreatePodSandBox",
-					Message: "container veth name provided (eth0) already exists ....",
-					InvolvedObject: corev1.ObjectReference{
-						Kind:            "Pod",
-						Namespace:       "default",
-						Name:            "foo.2",
-						UID:             "62f2e232-542f-40b6-9495-97ab3e443c1d",
-						APIVersion:      "v1",
-						ResourceVersion: "3768",
-						FieldPath:       "spec.containers{mycontainer}",
-					},
-					Source: corev1.EventSource{
-						Component: "kubelet",
-						Host:      "kublet.node1",
-					},
-					Count:          1,
-					FirstTimestamp: metav1.Now(),
-					LastTimestamp:  metav1.Now(),
-					Type:           corev1.EventTypeWarning,
-				},
-				&corev1.Event{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "test",
-						Name:      "bar.1",
-					},
-					Reason:  "FailedCreatePodSandBox",
-					Message: "container veth name provided (eth0) already exists ....",
-					InvolvedObject: corev1.ObjectReference{
-						Kind:            "Pod",
-						Namespace:       "test",
-						Name:            "bar.1",
-						UID:             "62f2e232-542f-40b6-9495-2",
-						APIVersion:      "v1",
-						ResourceVersion: "3777",
-						FieldPath:       "spec.containers{mycontainer}",
-					},
-					Source: corev1.EventSource{
-						Component: "kubelet",
-						Host:      "kublet.node1",
-					},
-					Count:          1,
-					FirstTimestamp: metav1.Now(),
-					LastTimestamp:  metav1.Now(),
-					Type:           corev1.EventTypeWarning,
-				},
+				makeEvent("foo", "default", "Scheduled", "Successfully assigned pod to kublet.node1", "Normal", 1, "uid1"),
+				makeEvent("foo", "default", "FailedCreatePodSandBox", "container veth name provided (eth0) already exists ....", "Warning", 2, "uid1"),
+				makeEvent("foo", "test", "FailedCreatePodSandBox", "container veth name provided (eth0) already exists ....", "Warning", 2, "uid2"),
 			},
 			eventNamespace:        "",
 			eventReason:           "FailedCreatePodSandBox",
@@ -298,12 +148,7 @@ func TestGetPodDetails(t *testing.T) {
 		{
 			testName: "Pod Exists",
 			mockedPods: []runtime.Object{
-				&corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "foo",
-						Namespace: "default",
-					},
-				},
+				makePod("foo", "default", 1, corev1.PodRunning, "abc1"),
 			},
 			podNamespace:  "default",
 			podName:       "foo",
