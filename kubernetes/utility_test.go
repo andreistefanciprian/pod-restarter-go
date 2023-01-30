@@ -199,3 +199,60 @@ func TestVerifyPodHasOwner(t *testing.T) {
 		})
 	}
 }
+
+func TestVerifyPodScheduledToBeDeleted(t *testing.T) {
+	deletionTimestamp := &metav1.Time{Time: time.Now()}
+	creationTimestamp := time.Now().Add(-time.Second * 10)
+
+	type Inputs struct {
+		pod PodDetails
+	}
+
+	type Expected struct {
+		err error
+	}
+
+	tests := map[string]struct {
+		inputs   Inputs
+		expected Expected
+	}{
+		"Verify pod without deletion schedule": {
+			inputs: Inputs{
+				pod: PodDetails{
+					PodName:           "foo",
+					PodNamespace:      "default",
+					CreationTimestamp: creationTimestamp,
+					DeletionTimestamp: nil,
+				},
+			},
+			expected: Expected{err: nil},
+		},
+		"Verify pod with deletion schedule": {
+			inputs: Inputs{
+				pod: PodDetails{
+					PodName:           "foo",
+					PodNamespace:      "default",
+					CreationTimestamp: creationTimestamp,
+					DeletionTimestamp: deletionTimestamp,
+				},
+			},
+			expected: Expected{err: fmt.Errorf("Pod has already been scheduled to be deleted: default/foo\n%v", deletionTimestamp)},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert := assert.New(t)
+			require := require.New(t)
+
+			err := tc.inputs.pod.verifyPodScheduledToBeDeleted()
+
+			if tc.expected.err != nil {
+				require.Error(tc.expected.err)
+				assert.EqualError(err, tc.expected.err.Error(), "Expected error: %v Got: %v", tc.expected.err, err)
+			} else {
+				require.NoError(err)
+			}
+		})
+	}
+}
