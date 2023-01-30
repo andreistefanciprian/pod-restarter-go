@@ -140,3 +140,62 @@ func TestVerifyPodStatus(t *testing.T) {
 		})
 	}
 }
+
+func TestVerifyPodHasOwner(t *testing.T) {
+	type Inputs struct {
+		pod PodDetails
+	}
+
+	type Expected struct {
+		err error
+	}
+
+	tests := map[string]struct {
+		inputs   Inputs
+		expected Expected
+	}{
+		"Verify no error is thrown when pod has owner": {
+			inputs: Inputs{
+				pod: PodDetails{
+					PodName:      "foo",
+					PodNamespace: "default",
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: "apps/v1",
+							Kind:       "ReplicaSet",
+							Name:       "foo",
+							UID:        "1",
+						},
+					},
+				},
+			},
+			expected: Expected{err: nil},
+		},
+		"Verify error is thrown if pod has no owner": {
+			inputs: Inputs{
+				pod: PodDetails{
+					PodName:         "foo",
+					PodNamespace:    "default",
+					OwnerReferences: []metav1.OwnerReference{},
+				},
+			},
+			expected: Expected{err: fmt.Errorf("Pod does not have owner/controller: default/foo")},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert := assert.New(t)
+			require := require.New(t)
+
+			err := tc.inputs.pod.verifyPodHasOwner()
+
+			if tc.expected.err != nil {
+				require.Error(tc.expected.err)
+				assert.EqualError(err, tc.expected.err.Error(), "Expected error: %v Got: %v", tc.expected.err, err)
+			} else {
+				require.NoError(err)
+			}
+		})
+	}
+}
