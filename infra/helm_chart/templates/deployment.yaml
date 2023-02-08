@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "pod_restarter.fullname" . }}
+  namespace: {{ template "pod_restarter.namespace" . }}
   labels:
     {{- include "pod_restarter.labels" . | nindent 4 }}
 spec:
