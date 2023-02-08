@@ -1,6 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: {{ include "pod_restarter.fullname" . }}
-  labels:
-    {{- include "pod_restarter.labels" . | nindent 4 }}
