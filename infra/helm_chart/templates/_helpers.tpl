@@ -46,7 +46,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 Selector labels
 */}}
 {{- define "pod_restarter.selectorLabels" -}}
-app: {{ include "pod_restarter.name" . }}
+app: {{ include "pod_restarter.fullname" . }}
 {{- end }}
 
 {{/*

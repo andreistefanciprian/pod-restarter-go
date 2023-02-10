@@ -2,7 +2,7 @@ apiVersion: v2
 name: pod-restarter
 description: A Helm chart for pod-restarter
 type: application
-version: 0.1.2
+version: 0.1.3
 appVersion: "1.16.5"
 maintainers:
   - name: andreistefanciprian
