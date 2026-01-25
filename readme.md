@@ -65,7 +65,7 @@ pod-restarter is configurable through cli parameters.
 
 ```
 # install dependencies
-go mod init
+go mod init 
 go mod tidy
 
 # compile source code into executable binary
@@ -104,4 +104,7 @@ bash generate_pending_pods.sh
 
 # check app logs
 kubectl logs -l app=pod-restarter -f
+
+# cleanup
+kubectl delete namespace test1 test2 test3
 ```
