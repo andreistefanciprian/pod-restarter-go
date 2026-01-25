@@ -65,7 +65,7 @@ pod-restarter is configurable through cli parameters.
 
 ```
 # install dependencies
-go mod init 
+go mod init
 go mod tidy
 
 # compile source code into executable binary
